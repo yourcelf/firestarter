@@ -1,0 +1,43 @@
+{
+    "name": "firestarter",
+    "version": "0.0.1",
+    "description": "Web application for firestarters/icebreakers/go-arounds.",
+    "author": {
+        "name": "Charlie DeTar",
+        "email": "cfd@media.mit.edu"
+    },
+    "scripts": {
+        "test": "mocha --compilers coffee:coffee-script --globals css,js,img spec/*.spec.coffee"
+    },
+    "engines": {
+        "node": ">=0.8"
+    },
+    "dependencies": {
+        "coffee-script": "~1",
+        "underscore": "~1",
+        "canvas": "~0.13",
+        "connect-assets": "~2",
+        "snockets": "~1.3",
+        "stylus": "~0",
+        "less": "*",
+        "nib": "*",
+        "connect": "~1",
+        "connect-redis": "~1",
+        "express": "~2",
+        "imagemagick": "~0",
+        "jade": "~0",
+        "markdown": "~0",
+        "mongoose": "~3",
+        "socket.io": "~0.9",
+        "redis": "~0",
+        "winston": "~0",
+        "node-uuid": "~1.3",
+        "node-iorooms": "git+https://github.com/yourcelf/node-iorooms"
+    },
+    "devDependencies": {
+        "mocha": "~1",
+        "zombie": "~0",
+        "expect.js": "~0.1",
+        "backbone": "~0.9"
+    }
+}

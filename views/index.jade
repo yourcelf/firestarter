@@ -1,0 +1,88 @@
+doctype 5
+html(lang="en")
+  head
+    meta(http-equiv="Content-Type", content="text/html; charset=utf-8")
+    meta(name='viewport', content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
+    meta(name="apple-mobile-web-app-capable", content="yes")
+    link(rel="shortcut icon", href="/img/favicon.gif")
+    title= title
+    !=css('bootstrap')
+    !=css('style')
+
+  body
+    div#page
+      noscript
+        :markdown
+          This site depends on javascript and cookies, thoroughly and completely.
+          Please enable and allow scripts from this site in order to use it.  If your
+          device does not support javascript, our apologies -- feel free to contact us
+          at cfd@media.mit.edu and we will consider adding support for your device.
+        
+          For the security conscious, the full javascript source code for this site
+          is freely available at https://github.com/yourcelf/firestarter if you'd like
+          to examine it.
+      div#flash
+      div#app
+        em Sparking...
+        img(src="/img/sparking.gif")
+
+    <script type='text/javascript'>
+    != "var INITIAL_DATA = " + JSON.stringify(initial_data)
+    </script>
+
+    script(type="text/template", id="splashTemplate")
+      div.container-fluid
+        div.row-fluid
+          div.span4.offset4
+            h1 Firestarter
+            p Go around, ice breaker, introductions, etc.
+            a.btn.btn-primary.new-firestarter(href='#newFirestarterModal', role='button', data-toggle='modal')
+              | New Firestarter
+          div.new-firestarter-modal.modal.hide.fade#newFirestarterModal
+            div.modal-header
+              button.close(type="button", data-dismiss="modal", aria-hidden="true") &times;
+              h3 New Firestarter
+            div.modal-body
+              form#new_firestarter_form.form-horizontal
+                div.control-group
+                  label.control-label(for="id_name") *Event name
+                  div.controls
+                    input#id_name(type='text', name='name')
+                div.control-group
+                  label.control-label(for="id_prompt") *Prompt
+                  div.controls
+                    textarea#id_prompt(name='prompt')
+                div.control-group.slugfield
+                  label.control-label(for="id_slug") *Short name (for URL)
+                  div.controls
+                    input#id_slug(type='text', placeholder='Unique name')
+
+                div.control-group
+                  div.controls
+                    div.firestarter-url
+                    div.help-inline
+                      | Anyone with the URL can add responses.
+                div.control-group
+                  div.controls
+                    label.checkbox
+                      input#id_public(type='checkbox', checked='checked', name='public')
+                      | List on the firestarter homepage
+                    div.help-inline
+                      | This makes it easier for participants to find, but less private.
+                div.control-group
+                  div.controls
+                    input.btn.btn-danger#submit_new_firestarter(type="submit", value="Start")
+
+    script(type="text/template", id="firestarterTemplate")
+      h1.name
+      div.byline
+        span.date
+        span.participants
+      div.prompt
+      div.responses
+
+    script(type="text/template", id="responseTemplate")
+
+    script(src="/socket.io/socket.io.js", type="text/javascript")
+    !=js('frontend')
+    include analytics.html
