@@ -29,6 +29,6 @@ FirestarterSchema.pre 'save', (next) ->
   next()
 Firestarter = mongoose.model("Firestarter", FirestarterSchema)
 Firestarter.with_responses = (constraint, cb) ->
-  return Firestarter.findOne(constraint).populate('responses')
+  Firestarter.findOne(constraint).populate('responses').exec(cb)
 
 module.exports = { Firestarter, Response }

@@ -7,6 +7,8 @@ catch e
         host: "localhost"
         port: 8000
         secret: "this is mah sekrit"
+        intertwinkles_groups_api: "http://localhost:8001/api/groups/"
+        intertwinkles_api_key: "one"
         dbhost: '127.0.0.1'
         dbport: '27017'
         dbname: 'firestarter'

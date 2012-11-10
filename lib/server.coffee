@@ -1,9 +1,11 @@
-express     = require 'express'
-socketio    = require 'socket.io'
-mongoose    = require 'mongoose'
-RoomManager = require('iorooms').RoomManager
-RedisStore  = require('connect-redis')(express)
-models      = require './schema'
+express       = require 'express'
+socketio      = require 'socket.io'
+mongoose      = require 'mongoose'
+RoomManager   = require('iorooms').RoomManager
+RedisStore    = require('connect-redis')(express)
+models        = require './schema'
+intertwinkles = require './intertwinkles'
+config        = require './config'
 
 start = (options) ->
   db = mongoose.connect(
@@ -42,11 +44,17 @@ start = (options) ->
   # Routes
   #
 
-  app.get '/', (req, res) ->
-    res.render 'index', { title: "Firestarter", initial_data: {} }
+  index_res = (req, res) ->
+    res.render 'index', {
+      title: "Firestarter"
+      initial_data: {
+        email: req.session.auth?.email or null
+        groups: req.session.groups or null
+      }
+    }
 
-  app.get '/f/:room', (req, res) ->
-    res.render 'index', { title: req.params.room, initial_data: {} }
+  app.get '/', index_res
+  app.get '/f/:room', index_res
 
   iorooms.onChannel "create_firestarter", (socket, data) ->
     unless data.callback?
@@ -94,11 +102,13 @@ start = (options) ->
   iorooms.onChannel 'get_firestarter', (socket, data) ->
     unless data.slug?
       socket.emit("error", {error: "Missing slug!"})
-    models.Firestarter.with_reponses {slug: data.slug}, (err, model) ->
+    models.Firestarter.with_responses {slug: data.slug}, (err, model) ->
       if err?
-        socket.emit({error: err})
+        socket.emit("error", {error: err})
       else
         socket.emit("firestarter", model.toJSON())
+
+  intertwinkles.attach(config, app, iorooms)
 
   #
   # Start

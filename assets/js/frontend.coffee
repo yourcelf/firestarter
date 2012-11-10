@@ -16,25 +16,43 @@
 #= require ../bootstrap/js/bootstrap-carousel.js
 #= require ../bootstrap/js/bootstrap-typeahead.js
 #= require ../bootstrap/js/bootstrap-affix.js
-#= require flash
+#= require ./flash
+#= require ./intertwinkles
 
 fire = {}
 
+$("header").html(new intertwinkles.Toolbar(appname: "Firestarter").render().el)
+
+Backbone.Model.prototype.idAttribute = "_id"
+class Firestarter extends Backbone.Model
+class Response extends Backbone.Model
+class ResponseCollection extends Backbone.Collection
+  model: Response
+
 class SplashView extends Backbone.View
   template: _.template($("#splashTemplate").html())
+  groupControlsTemplate: _.template($("#newFirestarterGroupControl").html())
   events:
     "submit #new_firestarter_form": "createFirestarter"
-    "click #id_public": "setPublicness"
     "keyup  #id_slug": "displayURL"
     "change #id_slug": "displayURL"
+    "click .sign-in": "signIn"
+
+  initialize: ->
+    intertwinkles.user.on "change", @renderGroupControls
+
+  signIn: ->
+    navigator.id.request()
 
   render: =>
     @$el.html(@template())
+    @renderGroupControls()
+
     @initializeURL()
     @displayURL()
 
-  setPublicness: (event) =>
-    checked = @$("#id_public").is(":checked")
+  renderGroupControls: =>
+    @$("#group_controls").html(@groupControlsTemplate())
 
   displayURL: =>
     val = @$("#id_slug").val()
@@ -63,7 +81,6 @@ class SplashView extends Backbone.View
       if data.error?
         if data.type == "ValidationError"
           for error in data.error
-            console.log error
             @$("#id_#{error.field}").parentsUntil(
               ".control-group").parent().addClass("error")
             @$("#id_#{error.field}").after(
@@ -72,8 +89,14 @@ class SplashView extends Backbone.View
         else
           alert("Unexpected server error! Oh fiddlesticks!")
       else
-        fire.model = data.model
-        fire.app.navigate("/f/#{encodeURIComponent(fire.model.slug)}", {trigger: true})
+        @$("#newFirestarterModal").modal('hide')
+        responses = data.model.responses
+        delete data.model.responses
+        fire.model = new Firestarter(data.model)
+        fire.responses = new ResponseCollection
+        for response in responses
+          fire.responses.add(new Response(response))
+        fire.app.navigate("/f/#{encodeURIComponent(fire.model.get("slug"))}", {trigger: true})
 
     fire.socket.emit "create_firestarter", {
       callback: "create_firestarter"
@@ -87,27 +110,94 @@ class SplashView extends Backbone.View
 
 class RoomWithAView extends Backbone.View
   template: _.template $("#firestarterTemplate").html()
-  responseTemplate: _.template $("#responseTemplate").html()
+  events:
+    'click #add_response': 'showAddResponseForm'
 
   initialize: (options) ->
-    fire.socket.on "firestarter", @updateFirestarter
-    fire.socket.on "response", @updateResponse
-    unless fire.model? and fire.model.slug == options.slug
+    if not fire.model?
+      fire.model = new Firestarter()
+    if not fire.responses?
+      fire.responses = new ResponseCollection()
+    @responseViews = []
+
+    fire.socket.on "firestarter", (data) =>
+      fire.model.set(data)
+
+    fire.socket.on "response", (data) =>
+      response = fire.responses.get(data._id)
+      if not response?
+        responses.add(new Response(data))
+      else
+        response.set(data)
+        @addResponse(response)
+
+    fire.model.on "change", @updateFirestarter
+    fire.responses.on "add", @addResponse
+    fire.responses.on "remove", @removeResponse
+
+    unless fire.model.get("slug") == options.slug
       fire.socket.emit "get_firestarter", {slug: options.slug}
 
-  updateFirestarter: (data) =>
-    fire.model = data
-    @$(".name").html(data.name)
-    @$(".prompt").html(data.prompt)
-    for response in data.responses
-      @updateResponse(response)
-  
-  updateResponse: (data) =>
+  updateFirestarter: =>
+    @$(".first-loading").hide()
+    @$(".name").html(fire.model.get("name"))
+    @$(".prompt").html(fire.model.get("prompt"))
+    @$(".date").html(fire.model.get("date")) # FIXME
+
+  showAddResponseForm: (event) =>
+    event.preventDefault()
+    @$("#add_response").hide()
+    editor = new EditResponseView()
+    @$(".add-response-holder").html(editor.el)
+    editor.render()
+    editor.on "save", (model) =>
+      fire.socket.emit "add_response", {model: model.toJSON()}
+      fire.responses.add(model)
+      editor.remove()
+
+  addResponse: (response) =>
+    view = new ResponseView(model: response)
+    @$(".responses").append(view.el)
+    view.render()
+    @responseViews.add(view)
+
+  removeResponse: (response) =>
+    for view in @responseViews
+      if view.model.id == response.id
+        view.remove()
+        @responseViews = _.reject @responseViews, (a) -> a.model.id == response.id
+        return
 
   render: =>
     @$el.html(@template())
+    if @my_response?
+      @$(".edit-response-holder").hide()
+    if fire.model?
+      @updateFirestarter()
+    if fire.responses?
+      for response in fire.responses
+        @addResponse(response)
 
+class EditResponseView extends Backbone.View
+  template: _.template $("#editResponseTemplate").html()
+  events:
+    'submit #edit_response_form': 'saveResponse'
 
+  initialize: (options={}) =>
+    @model = options.model or new Response()
+
+  render: =>
+    context = _.extend({
+      response: ""
+    }, @model.toJSON())
+    @$el.html @template(context)
+
+  saveResponse: (event) =>
+    event.preventDefault()
+    @$("#edit_response_form input[type=submit]").addClass("loading")
+
+class ShowResponseView extends Backbone.View
+  template: _.template $("#responseTemplate").html()
 
 class Router extends Backbone.Router
   routes:
@@ -123,13 +213,15 @@ class Router extends Backbone.Router
     slug = decodeURIComponent(roomName)
 
     # Disconnect from previous room, if any.
-    if fire.slug?
-      socket.emit("leave", {room: slug})
+    if fire.model?
+      socket.emit("leave", {room: fire.model.get("slug")})
+      delete fire.model
+    if fire.responses?
+      delete fire.responses
     socket.removeAllListeners("firestarter")
     socket.removeAllListeners("response")
 
     # Connect to new room.
-    fire.slug = slug
     socket.emit("join", {room: slug})
     view = new RoomWithAView({slug: slug})
     $("#app").html(view.el)
@@ -137,11 +229,12 @@ class Router extends Backbone.Router
 
 socket = io.connect("/iorooms")
 socket.on "error", (data) ->
-  alert("Oh hai, the server has ERRORed. Oh noes!")
-  window.console?.log?(error)
+  flash("error", "Oh hai, the server has ERRORed. Oh noes!")
+  window.console?.log?(data.error)
 
 socket.on "connect", ->
   fire.socket = socket
+  intertwinkles.socket = socket
   unless fire.started == true
     fire.app = new Router()
     Backbone.history.start(pushState: true, silent: false)
