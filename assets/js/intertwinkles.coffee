@@ -2,9 +2,11 @@
 #= require vendor/underscore
 #= require vendor/underscore-autoescape
 #= require vendor/backbone
+#= require vendor/date.js
 #= require ../bootstrap/js/bootstrap-transition.js
 #= require ../bootstrap/js/bootstrap-dropdown.js
 #= require flash
+#= require urlize
 
 window.intertwinkles = intertwinkles = {}
 class intertwinkles.User extends Backbone.Model
@@ -179,7 +181,7 @@ class intertwinkles.SignInView extends Backbone.View
     navigator.id.request()
 
 user_choice_template = _.template("
-  <input type='text' name='name' id='id_user' data-provide='typeahead' value='<%= name %>' />
+  <input type='text' name='name' id='id_user' data-provide='typeahead' autocomplete='off' value='<%= name %>' />
   <span class='icon-holder' style='width: 32px; display: inline-block;'>
     <% if (icon) { %><img src='<%= icon %>' /><% } %>
   </span>
@@ -189,19 +191,27 @@ user_choice_template = _.template("
 class intertwinkles.UserChoice extends Backbone.View
   tagName: "span"
   template: user_choice_template
-  initialize: (options={}) ->
-    intertwinkles.user.on "change", @render
   events:
     'keydown input': 'keyup'
 
   initialize: (options={}) ->
     @model = options.model or {}
+    intertwinkles.user.on "change", @render
 
   render: =>
+    user_id = @model.get("user_id")
+    if user_id and intertwinkles.users?[user_id]?
+      name = intertwinkles.users[user_id].name
+      icon = intertwinkles.users[user_id].icon
+    else
+      user_id = ""
+      name = @model.get("name") or ""
+      icon = {}
+
     @$el.html(@template({
-      name: @model.name or ""
-      user_id: @model.id or ""
-      icon: if @model.icon?.small then @model.icon.small or ""
+      name: name
+      user_id: user_id
+      icon: if icon.small? then icon.small else ""
     }))
 
     @$("#id_user").typeahead {
@@ -248,7 +258,44 @@ class intertwinkles.UserChoice extends Backbone.View
       return '<strong>' + match + '</strong>'
     return "<span>#{img} #{highlit}</span>"
 
+class intertwinkles.AutoUpdatingDate extends Backbone.View
+  tagName: "span"
+  initialize: (datetime) ->
+    if typeof(datetime) == "object"
+      @date = datetime
+    else
+      @date = new Date(datetime)
+    @interval = setInterval @render, 60000
+    @$el.addClass("date")
 
+  render: =>
+    now = new Date()
+    date = @date
+    if now.getFullYear() != date.getFullYear()
+      str = date.toString("MMM d, YYYY")
+    else if now.getMonth() != date.getMonth() or now.getDate() != date.getDate()
+      str = date.toString("MMM d")
+    else
+      diff = now.getTime() - date.getTime()
+      seconds = diff / 1000
+      if seconds > (60 * 60)
+        str = parseInt(seconds / 60 / 60) + "h"
+      else if seconds > 60
+        str = parseInt(seconds / 60) + "m"
+      else
+        str = parseInt(seconds) + "s"
+    @$el.attr("title", date.toString("dddd, MMMM dd, yyyy h:mm:ss tt"))
+    @$el.html(str)
+
+intertwinkles.inline_user = (user_id, name) ->
+  user = intertwinkles.users?[user_id]
+  if user?
+    return "<img src='#{_.escapeHTML(user.icon.small)}' /> #{_.escapeHTML(user.name)}"
+  else
+    return "<span style='width: 32px;'><i class='icon icon-user'></i></span> #{name}"
+
+intertwinkles.markup = (response) ->
+  return urlize(response, 50, true, _.escapeHTML)
 
 #
 # Group UI

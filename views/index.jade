@@ -84,34 +84,79 @@ html(lang="en")
             div.first-loading
               em Sparking...
               img(src="/img/sparking.gif")
-            h1.name
+            h1.hover-edit
+              span.firestarter-name
+              a.edit-link.edit-name(href='#') Edit
             div.byline
-              span.date
-              span.participants
-            div.prompt
+              span.firestarter-date
+              span.firestarter-participants
+            div.well.hover-edit
+              span.firestarter-prompt
+              a.edit-link.edit-prompt(href='#') Edit
         div.row-fluid
           div.span6.offset3
-            a.btn.btn-danger.btn-large#add_response Add response
-            div.add-response-holder
+            div(style='text-align: center;')
+              a.btn.btn-danger.btn-large#add_response Add response
+            div.modal.hide.fade.add-response-holder
         div.row-fluid
-          div.span12.responses
+          div.span12.responses(style='text-align: center;')
+        div.modal.fade.hide.edit-name-modal
+          form.form-horizontal
+            div.modal-body
+              div.control-group
+                label.control-label(for="id_firestarter_name") Event name:
+                div.controls
+                  input#id_firestarter_name(type='text')
+            div.modal-footer
+              a.btn.pull-left(data-dismiss="modal") Cancel
+              input.btn.btn-primary#id_save_name(type='submit', value='Save')
+        div.modal.fade.hide.edit-prompt-modal
+          form.form-horizontal
+            div.modal-body
+              div.control-group
+                label.control-label(for="id_firestarter_prompt") Prompt:
+                div.controls
+                  textarea#id_firestarter_prompt
+            div.modal-footer
+              a.btn.pull-left(data-dismiss="modal") Cancel
+              input.btn.btn-primary#id_save_prompt(type='submit', value='Save')
 
     script(type="text/template", id="editResponseTemplate")
       form.form-horizontal#edit_response_form
-        div.control-group
-          label.control-label(for="id_name") Name
-          div.controls#name_controls
-        div.control-group
-          label.control-label(for="id_response") Response
-          div.controls
-            textarea#id_response
-              <%= response  %>
-        div.control-group
-          div.controls
-            input.btn.btn-danger(type='submit', value='Add')
+        div.modal-body
+          div.control-group
+            label.control-label(for="id_name") Name
+            div.controls#name_controls
+          div.control-group
+            label.control-label(for="id_response") Response
+            div.controls
+              textarea#id_response
+                <%= response %>
+        div.modal-footer
+          a.btn.cancel.pull-left(data-dismiss="modal") Cancel
+          <input class='btn btn-danger' type='submit' value='<%= verb %>' />
 
     script(type="text/template", id="responseTemplate")
-      div.span3.pull-left
+      div.name
+        <%- intertwinkles.inline_user(user_id, name) %>
+        span(style="float: right;").date-holder
+      div.response
+        <%- intertwinkles.markup(response) %>
+      div.foot
+        a.delete(href='#', style='float: left;')
+          i.icon.icon-trash
+        a.edit(href='#', style='float: right;') Edit
+        div.delete-confirmation.modal.fade.hide
+          div.modal-header
+            button.close.modal(type='button', data-dismiss='modal', aria-hidden='true') &times;
+            h1 Really delete?
+          div.modal-body
+            | Delete the response by <%- intertwinkles.inline_user(user_id, name) %>?
+          div.modal-footer
+            a.btn(href='#', data-dismiss='modal') Close
+            a.btn.btn-danger.really-delete(href='#') Delete
+
+      div(style='clear: both;')
 
     script(src="https://login.persona.org/include.js")
     script(src="/socket.io/socket.io.js", type="text/javascript")

@@ -5,12 +5,11 @@ ResponseSchema = new Schema
   firestarter_id: {type: Schema.ObjectId, ref: 'Firestarter'}
   created: Date
   response: String
-  user: {
-    user_id: String
-    name: String
-  }
+  user_id: String
+  name: String
 ResponseSchema.pre 'save', (next) ->
   @set 'created', new Date().getTime() unless @created
+  next()
 Response = mongoose.model("Response", ResponseSchema)
 
 FirestarterSchema = new Schema

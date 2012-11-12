@@ -12,7 +12,7 @@
 //
 // _.template(…) will now automatically escape values when using the
 // <%= … %> interpolation. If you wish to use the traditional, non-escaped
-// interpolation, use <%| … %>.
+// interpolation, use <%- … %>.
 //
 // Bonus: _.escapeHTML(string) will HTML escape string.
 //
@@ -57,7 +57,7 @@
      
     var templateSettings = {
         evaluate    : /<%([\s\S]+?)%>/g,
-        interpolate : /<%\|([\s\S]+?)%>/g,
+        interpolate : /<%-([\s\S]+?)%>/g,
         autoEscape  : /<%=([\s\S]+?)%>/g
     };
 

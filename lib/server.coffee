@@ -6,6 +6,7 @@ RedisStore    = require('connect-redis')(express)
 models        = require './schema'
 intertwinkles = require './intertwinkles'
 config        = require './config'
+_             = require 'underscore'
 
 start = (options) ->
   db = mongoose.connect(
@@ -44,19 +45,25 @@ start = (options) ->
   # Routes
   #
 
-  index_res = (req, res) ->
+  index_res = (req, res, initial_data) ->
     res.render 'index', {
       title: "Firestarter"
-      initial_data: {
+      initial_data: _.extend({
         email: req.session.auth?.email or null
         groups: req.session.groups or null
-      }
+      }, initial_data)
       intertwinkles_base_url: config.intertwinkles_base_url
     }
-
-  app.get '/', index_res
-  app.get '/new', index_res
-  app.get '/f/:room', index_res
+  app.get '/', (req, res) -> index_res(req, res, {})
+  app.get '/new', (req, res) -> index_res(req, res, {})
+  app.get '/f/:slug', (req, res) ->
+    models.Firestarter.with_responses {slug: req.params.slug}, (err, doc) ->
+      if err?
+        res.send(500)
+      else if not doc?
+        res.send(404)
+      else
+        index_res(req, res, {firestarter: doc.toJSON()})
 
   # Get a valid slug for a firestarter that hasn't yet been used.
   iorooms.onChannel 'get_unused_slug', (socket, data) ->
@@ -103,6 +110,27 @@ start = (options) ->
       else
         socket.emit(data.callback, {model: model.toJSON()})
 
+  # Edit a firestarter
+  iorooms.onChannel 'edit_firestarter', (socket, data) ->
+    updates = {}
+    changes = false
+    for key in ["name", "prompt", "public"]
+      if data.model?[key]
+        updates[key] = data.model[key]
+        changes = true
+    if not changes then return socket.emit "error", {error: "No edits specified."}
+
+    models.Firestarter.findOne {_id: data.model._id}, (err, doc) ->
+      if err? then return socket.emit "error", {error: err}
+      for key, val of updates
+        doc[key] = val
+      doc.save (err, doc) ->
+        if err? then return socket.emit "error", {error: err}
+        res = {model: doc.toJSON()}
+        delete res.model.responses
+        if data.callback? then socket.emit data.callback, res
+        socket.broadcast.to(doc.slug).emit "firestarter", res
+
   # Retrieve a firestarter with responses.
   iorooms.onChannel 'get_firestarter', (socket, data) ->
     unless data.slug?
@@ -110,30 +138,28 @@ start = (options) ->
     models.Firestarter.with_responses {slug: data.slug}, (err, model) ->
       if err?
         socket.emit("error", {error: err})
+      else if not model?
+        socket.emit("firestarter", {error: 404})
       else
-        socket.emit("firestarter", model.toJSON())
+        socket.emit("firestarter", {model: model.toJSON()})
 
   # Save a response to a firestarter.
   iorooms.onChannel "save_response", (socket, data) ->
-    console.log("save_response", data)
     respond = (err, firestarter, response) ->
-      console.log("respond", err, firestarter, response)
       if err?
         socket.emit "error", {error: err}
       else
-        response = {model: doc.toJSON()}
-        if data.callback? then socket.emit(data.callback, response)
-        socket.broadcast.to(firestarter.slug).emit("response", response)
+        responseData = {model: response.toJSON()}
+        if data.callback? then socket.emit(data.callback, responseData)
+        socket.broadcast.to(firestarter.slug).emit("response", responseData)
 
     if not data.model?.firestarter_id
       respond("Missing firestarter id")
 
     models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
       if err? then return respond(err)
-      console.log("found", err, firestarter)
 
       updateFirestarter = (err, responseDoc) ->
-        console.log("updateFirestarter", err, responseDoc)
         if err? then return respond(err)
         if firestarter.responses.indexOf(responseDoc._id) == -1
           # Add response to firestarter.
@@ -144,19 +170,47 @@ start = (options) ->
           respond(err, firestarter, responseDoc)
       
       updates = {
-        user: {
-          user_id: data.model.user_id
-          name: data.model.name
-        }
+        user_id: data.model.user_id
+        name: data.model.name
         response: data.model.response
+        firestarter_id: firestarter._id
       }
       if data.model._id
-        console.log "try update"
-        models.Response.update({_id: data.model._id}, updates, updateFirestarter)
+        models.Response.findOne {_id: data.model._id}, (err, doc) ->
+          if err? then return respond(err)
+          for key, val of updates
+            doc[key] = val
+          doc.save(updateFirestarter)
       else
-        console.log "try insert"
         doc = new models.Response(updates)
         doc.save(updateFirestarter)
+
+  # Delete a response
+  iorooms.onChannel "delete_response", (socket, data) ->
+    if not data.model?.firestarter_id? then respond("Missing firestarter id")
+
+    respond = (err, firestarter, response) ->
+      if err? then return socket.emit "error", {error: err}
+      responseData = {model: {_id: data.model._id}}
+      if data.callback? then socket.emit(data.callback, responseData)
+      socket.broadcast.to(firestarter.slug).emit("delete_response", responseData)
+
+    models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
+      if err? then return respond(err)
+      if not firestarter? then return respond("Error: firestarter not found.")
+      unless data.model._id? then return respond("No response._id specified.")
+
+      models.Response.findOne {_id: data.model._id}, (err, doc) ->
+        if err? then return respond(err)
+        doc.remove (err) ->
+          if err? then return respond(err)
+          # Remove response ID from firestarter doc
+          index = firestarter.responses.indexOf(data.model._id)
+          if index != -1
+            firestarter.responses.splice(index, 1)
+            firestarter.save(respond)
+          else
+            respond(err, firestarter)
 
   intertwinkles.attach(config, app, iorooms)
 
