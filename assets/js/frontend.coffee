@@ -23,15 +23,28 @@ fire = {}
 
 $("header").html(new intertwinkles.Toolbar(appname: "Firestarter").render().el)
 
-Backbone.Model.prototype.idAttribute = "_id"
 class Firestarter extends Backbone.Model
+  idAttribute: "_id"
 class Response extends Backbone.Model
+  idAttribute: "_id"
 class ResponseCollection extends Backbone.Collection
   model: Response
 
+
 class SplashView extends Backbone.View
   template: _.template($("#splashTemplate").html())
-  groupControlsTemplate: _.template($("#newFirestarterGroupControl").html())
+  events:
+    "click .new-firestarter": "newFirestarter"
+
+  render: =>
+    @$el.html(@template())
+
+  newFirestarter: (event) =>
+    event.preventDefault()
+    fire.app.navigate("/new", {trigger: true})
+
+class AddFirestarterView extends Backbone.View
+  template: _.template($("#addFirestarterTemplate").html())
   events:
     "submit #new_firestarter_form": "createFirestarter"
     "keyup  #id_slug": "displayURL"
@@ -41,9 +54,6 @@ class SplashView extends Backbone.View
   initialize: ->
     intertwinkles.user.on "change", @renderGroupControls
 
-  signIn: ->
-    navigator.id.request()
-
   render: =>
     @$el.html(@template())
     @renderGroupControls()
@@ -52,7 +62,12 @@ class SplashView extends Backbone.View
     @displayURL()
 
   renderGroupControls: =>
-    @$("#group_controls").html(@groupControlsTemplate())
+    view = new intertwinkles.GroupChoice()
+    @$("#group_controls").html(view.el)
+    view.render()
+
+  signIn: ->
+    navigator.id.request()
 
   displayURL: =>
     val = @$("#id_slug").val()
@@ -89,7 +104,6 @@ class SplashView extends Backbone.View
         else
           alert("Unexpected server error! Oh fiddlesticks!")
       else
-        @$("#newFirestarterModal").modal('hide')
         responses = data.model.responses
         delete data.model.responses
         fire.model = new Firestarter(data.model)
@@ -107,6 +121,8 @@ class SplashView extends Backbone.View
         public: @$("#id_public").val()
       }
     }
+
+
 
 class RoomWithAView extends Backbone.View
   template: _.template $("#firestarterTemplate").html()
@@ -150,10 +166,9 @@ class RoomWithAView extends Backbone.View
     editor = new EditResponseView()
     @$(".add-response-holder").html(editor.el)
     editor.render()
-    editor.on "save", (model) =>
-      fire.socket.emit "add_response", {model: model.toJSON()}
-      fire.responses.add(model)
+    editor.on "done", =>
       editor.remove()
+      @$("#add_response").show()
 
   addResponse: (response) =>
     view = new ResponseView(model: response)
@@ -182,9 +197,13 @@ class EditResponseView extends Backbone.View
   template: _.template $("#editResponseTemplate").html()
   events:
     'submit #edit_response_form': 'saveResponse'
+    'click .cancel': 'cancel'
 
   initialize: (options={}) =>
     @model = options.model or new Response()
+
+  cancel: =>
+    @trigger "done"
 
   render: =>
     context = _.extend({
@@ -192,9 +211,49 @@ class EditResponseView extends Backbone.View
     }, @model.toJSON())
     @$el.html @template(context)
 
+    user_choice = new intertwinkles.UserChoice()
+    @$("#name_controls").html user_choice.el
+    user_choice.render()
+    @$("#id_user").focus()
+
   saveResponse: (event) =>
     event.preventDefault()
     @$("#edit_response_form input[type=submit]").addClass("loading")
+    @$(".error").removeClass("error")
+    @$(".error-msg").remove()
+    errors = false
+
+    name = @$("#id_user").val()
+    if not name
+      @$("#id_user").parentsUntil(".control-group").parent().addClass("error")
+      @$("#id_user").append("<span class='help-text error-msg'>This field is required</span>")
+      errors = true
+    response = @$("#id_response").val()
+    if not response
+      @$("#id_response").parentsUntil(".control-group").parent().addClass("error")
+      @$("#id_response").append("<span class='help-text error-msg'>This field is required</span>")
+      errors = true
+
+    if errors
+      @$("#edit_response_form input[type=submit]").removeClass("loading")
+    else
+      updates = {
+        _id: @model.get("_id")
+        user: { user_id: @$("#id_user_id").val(), name: name }
+        response: response
+        firestarter_id: fire.model.id
+      }
+      fire.socket.once "response_saved", (data) ->
+        if data.error
+          flash "error", "Oh noes. SERVER ERROR. !!"
+          console.log data.error
+        else
+          add_it = @model.get("_id")?
+          @model.set(data.model)
+          if add_it
+            fire.responses.add(@model)
+          @trigger "done"
+      fire.socket.emit "save_response", { callback: "response_saved", model: updates }
 
 class ShowResponseView extends Backbone.View
   template: _.template $("#responseTemplate").html()
@@ -202,10 +261,16 @@ class ShowResponseView extends Backbone.View
 class Router extends Backbone.Router
   routes:
     'f/:room': 'room'
+    'new':     'newFirestarter'
     '':        'index'
 
   index: ->
     view = new SplashView()
+    $("#app").html(view.el)
+    view.render()
+
+  newFirestarter: ->
+    view = new AddFirestarterView()
     $("#app").html(view.el)
     view.render()
 

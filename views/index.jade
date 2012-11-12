@@ -28,68 +28,54 @@ html(lang="en")
         img(src="/img/sparking.gif")
 
     <script type='text/javascript'>
-    != "var INITIAL_DATA = " + JSON.stringify(initial_data)
+    != "var INITIAL_DATA = " + JSON.stringify(initial_data) + ";"
+    != "var INTERTWINKLES_BASE_URL = '" + intertwinkles_base_url + "';"
     </script>
 
-    script(type='text/template', id="newFirestarterGroupControl")
-      <% if (intertwinkles.user.id) { %>
-      select#id_group
-        option(value='') ----
-        <% for (var i = 0; i < intertwinkles.groups.length; i++) { %>
-        <% group = intertwinkles.groups[i]; %>
-        <option val='<%= group.id %>'><%= group.name %></option>
-        <% } %>
-      span.help-text Optional
-      <% } else { %>
-      a.sign-in(href='#')
-        img(src='/img/signin.png', alt='Sign in')
-      | to add a group
-      <% } %>
+    script(type="text/template", id="addFirestarterTemplate")
+      div.row-fluid
+        div.span6.offset3
+          h3 New Firestarter
+          form#new_firestarter_form.form-horizontal
+            div.control-group
+              label.control-label(for="id_group") Group
+              div.controls#group_controls
+              
+            div.control-group
+              label.control-label(for="id_name") *Event name
+              div.controls
+                input#id_name(type='text', name='name')
+            div.control-group
+              label.control-label(for="id_prompt") *Firestarter question
+              div.controls
+                textarea#id_prompt(name='prompt')
+            div.control-group.slugfield
+              label.control-label(for="id_slug") *Code name
+              div.controls
+                input#id_slug(type='text', placeholder='Unique name')
+                div.firestarter-url
+                div.help-inline
+                  | Anyone with the URL can add responses.
+            div.control-group
+              div.controls
+                label.checkbox
+                  input#id_public(type='checkbox', checked='checked', name='public')
+                  | List on the firestarter homepage
+                div.help-inline
+                  | This makes it easier for participants to find, but less private.
+            div.control-group
+              div.controls
+                input.btn.btn-danger#submit_new_firestarter(type="submit", value="Start")
 
     script(type="text/template", id="splashTemplate")
       div.container-fluid
         div.row-fluid
           div.span12(style='text-align: center;')
             h1 Firestarter
-          div.span4.offset4
             p Go around, ice breaker, introductions, etc.
-            a.btn.btn-primary.new-firestarter(href='#newFirestarterModal', role='button', data-toggle='modal')
-              | New Firestarter
-          div.new-firestarter-modal.modal.hide#newFirestarterModal
-            div.modal-header
-              button.close(type="button", data-dismiss="modal", aria-hidden="true") &times;
-              h3 New Firestarter
-            div.modal-body
-              form#new_firestarter_form.form-horizontal
-                div.control-group
-                  label.control-label(for="id_group") Group
-                  div.controls#group_controls
-                  
-                div.control-group
-                  label.control-label(for="id_name") *Event name
-                  div.controls
-                    input#id_name(type='text', name='name')
-                div.control-group
-                  label.control-label(for="id_prompt") *Firestarter question
-                  div.controls
-                    textarea#id_prompt(name='prompt')
-                div.control-group.slugfield
-                  label.control-label(for="id_slug") *Short name (for URL)
-                  div.controls
-                    input#id_slug(type='text', placeholder='Unique name')
-                    div.firestarter-url
-                    div.help-inline
-                      | Anyone with the URL can add responses.
-                div.control-group
-                  div.controls
-                    label.checkbox
-                      input#id_public(type='checkbox', checked='checked', name='public')
-                      | List on the firestarter homepage
-                    div.help-inline
-                      | This makes it easier for participants to find, but less private.
-                div.control-group
-                  div.controls
-                    input.btn.btn-danger#submit_new_firestarter(type="submit", value="Start")
+            p
+              a.btn.btn-large.btn-primary.new-firestarter(href='#')
+                | New Firestarter
 
     script(type="text/template", id="firestarterTemplate")
       div.container-fluid
@@ -105,7 +91,7 @@ html(lang="en")
             div.prompt
         div.row-fluid
           div.span6.offset3
-            a.btn.btn-danger#add_response Add response
+            a.btn.btn-danger.btn-large#add_response Add response
             div.add-response-holder
         div.row-fluid
           div.span12.responses
@@ -114,13 +100,12 @@ html(lang="en")
       form.form-horizontal#edit_response_form
         div.control-group
           label.control-label(for="id_name") Name
-          div.controls
-            input#id_name
+          div.controls#name_controls
         div.control-group
           label.control-label(for="id_response") Response
           div.controls
             textarea#id_response
-              <%= response ? response : "" %>
+              <%= response  %>
         div.control-group
           div.controls
             input.btn.btn-danger(type='submit', value='Add')

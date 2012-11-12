@@ -5,8 +5,8 @@ _ = require 'underscore'
 
 
 verify = (assertion, config, callback) ->
-  unless config.intertwinkles_groups_api?
-    throw "Missing required config parameter: intertwinkles_groups_api"
+  unless config.intertwinkles_base_url?
+    throw "Missing required config parameter: intertwinkles_base_url"
   unless config.intertwinkles_api_key?
     throw "Missing required config parameter: intertwinkles_api_key"
 
@@ -14,16 +14,20 @@ verify = (assertion, config, callback) ->
     if (err)
       callback({'error': err})
     else
-      api_url = url.parse(config.intertwinkles_groups_api)
+      api_url = url.parse(config.intertwinkles_base_url + "/api/groups/")
       if api_url.protocol == "https:"
         httplib = require 'https'
       else if api_url.protocol == "http:"
         httplib = require 'http'
 
+      query = {
+        api_key: config.intertwinkles_api_key
+        user: msg.email
+      }
       opts = {
         hostname: api_url.hostname
         port: api_url.port
-        path: api_url.pathname + "?#{querystring.stringify({api_key: config.intertwinkles_api_key, user: msg.email})}"
+        path: "#{api_url.pathname}?#{querystring.stringify(query)}"
       }
       req = httplib.get(opts, (res) ->
         res.setEncoding('utf8')
@@ -47,23 +51,29 @@ verify = (assertion, config, callback) ->
 
 attach = (config, app, iorooms) ->
   if iorooms?
-    iorooms.onChannel 'verify', (socket, data) ->
-      verify data.assertion, config, (err, auth, groups) ->
+    iorooms.onChannel 'verify', (socket, reqdata) ->
+      verify reqdata.assertion, config, (err, auth, groupdata) ->
         if err?
           socket.emit("error", err)
           socket.session.auth = null
           socket.session.groups = null
           iorooms.saveSession(socket.session)
+          console.log "error", err
         else
           socket.session.auth = auth
-          socket.session.groups = groups
-          socket.emit(data.callback, {email: auth.email, groups: groups})
+          socket.session.groups = { groups: groupdata.groups, users: groupdata.users }
+          socket.emit reqdata.callback, {
+            email: auth.email,
+            groups: socket.session.groups,
+            messages: groupdata.messages
+          }
           iorooms.saveSession(socket.session)
     iorooms.onChannel "logout", (socket, data) ->
+      # Keep the session around, so that we maintain our socket list.
       socket.session.auth = null
       socket.session.groups = null
-      iorooms.saveSession(socket.session)
-      socket.emit(data.callback, {status: "success"})
+      iorooms.saveSession socket.session, ->
+        socket.emit(data.callback, {status: "success"})
   if app?
     null
     # TODO: Add routes to "/verify" and "/logout" for AJAX

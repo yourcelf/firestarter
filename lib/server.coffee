@@ -51,11 +51,33 @@ start = (options) ->
         email: req.session.auth?.email or null
         groups: req.session.groups or null
       }
+      intertwinkles_base_url: config.intertwinkles_base_url
     }
 
   app.get '/', index_res
+  app.get '/new', index_res
   app.get '/f/:room', index_res
 
+  # Get a valid slug for a firestarter that hasn't yet been used.
+  iorooms.onChannel 'get_unused_slug', (socket, data) ->
+    choices = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    unless data.callback?
+      socket.emit("error", {error: "Must specify callback."})
+      return
+
+    get_slug = ->
+      random_name = (
+        choices.substr(parseInt(Math.random() * choices.length), 1) for i in [0...6]
+      ).join("")
+      models.Firestarter.find {slug: random_name}, (err, things) ->
+        socket.emit({error: err}) if err
+        if things.length == 0
+          socket.emit(data.callback, {slug: random_name})
+        else
+          get_slug()
+    get_slug()
+
+  # Create a new firestarter.
   iorooms.onChannel "create_firestarter", (socket, data) ->
     unless data.callback?
       socket.emit("error", {error: "Must specifiy callback."})
@@ -81,24 +103,7 @@ start = (options) ->
       else
         socket.emit(data.callback, {model: model.toJSON()})
 
-  iorooms.onChannel 'get_unused_slug', (socket, data) ->
-    choices = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    unless data.callback?
-      socket.emit("error", {error: "Must specify callback."})
-      return
-
-    get_slug = ->
-      random_name = (
-        choices.substr(parseInt(Math.random() * choices.length), 1) for i in [0...6]
-      ).join("")
-      models.Firestarter.find {slug: random_name}, (err, things) ->
-        socket.emit({error: err}) if err
-        if things.length == 0
-          socket.emit(data.callback, {slug: random_name})
-        else
-          get_slug()
-    get_slug()
-
+  # Retrieve a firestarter with responses.
   iorooms.onChannel 'get_firestarter', (socket, data) ->
     unless data.slug?
       socket.emit("error", {error: "Missing slug!"})
@@ -107,6 +112,51 @@ start = (options) ->
         socket.emit("error", {error: err})
       else
         socket.emit("firestarter", model.toJSON())
+
+  # Save a response to a firestarter.
+  iorooms.onChannel "save_response", (socket, data) ->
+    console.log("save_response", data)
+    respond = (err, firestarter, response) ->
+      console.log("respond", err, firestarter, response)
+      if err?
+        socket.emit "error", {error: err}
+      else
+        response = {model: doc.toJSON()}
+        if data.callback? then socket.emit(data.callback, response)
+        socket.broadcast.to(firestarter.slug).emit("response", response)
+
+    if not data.model?.firestarter_id
+      respond("Missing firestarter id")
+
+    models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
+      if err? then return respond(err)
+      console.log("found", err, firestarter)
+
+      updateFirestarter = (err, responseDoc) ->
+        console.log("updateFirestarter", err, responseDoc)
+        if err? then return respond(err)
+        if firestarter.responses.indexOf(responseDoc._id) == -1
+          # Add response to firestarter.
+          firestarter.responses.push(responseDoc._id)
+          firestarter.save (err, firestarter) ->
+            respond(err, firestarter, responseDoc)
+        else
+          respond(err, firestarter, responseDoc)
+      
+      updates = {
+        user: {
+          user_id: data.model.user_id
+          name: data.model.name
+        }
+        response: data.model.response
+      }
+      if data.model._id
+        console.log "try update"
+        models.Response.update({_id: data.model._id}, updates, updateFirestarter)
+      else
+        console.log "try insert"
+        doc = new models.Response(updates)
+        doc.save(updateFirestarter)
 
   intertwinkles.attach(config, app, iorooms)
 

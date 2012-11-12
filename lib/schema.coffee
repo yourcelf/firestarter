@@ -2,13 +2,12 @@ mongoose    = require 'mongoose'
 Schema      = mongoose.Schema
 
 ResponseSchema = new Schema
-  firestarter: {type: Schema.ObjectId, ref: 'Firestarter'}
+  firestarter_id: {type: Schema.ObjectId, ref: 'Firestarter'}
   created: Date
   response: String
   user: {
-    intertwinkles_user_id: String
+    user_id: String
     name: String
-    session_id: String
   }
 ResponseSchema.pre 'save', (next) ->
   @set 'created', new Date().getTime() unless @created

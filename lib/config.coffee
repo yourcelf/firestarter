@@ -5,9 +5,9 @@ try
 catch e
     config =
         host: "localhost"
-        port: 8000
+        port: 9000
         secret: "this is mah sekrit"
-        intertwinkles_groups_api: "http://localhost:8001/api/groups/"
+        intertwinkles_base_url: "http://localhost:8000"
         intertwinkles_api_key: "one"
         dbhost: '127.0.0.1'
         dbport: '27017'
