@@ -156,6 +156,8 @@ class ShowFirestarter extends Backbone.View
       fire.responses = new ResponseCollection()
     @responseViews = []
 
+    @roomUsersMenu = new intertwinkles.RoomUsersMenu({room: options.slug})
+
     fire.socket.on "firestarter", (data) =>
       console.log "on firestarter", data
       if data.model?
@@ -180,6 +182,16 @@ class ShowFirestarter extends Backbone.View
 
     unless fire.model.get("slug") == options.slug
       fire.socket.emit "get_firestarter", {slug: options.slug}
+
+  remove: =>
+    @roomusersMenu.remove()
+    fire.socket.removeAllListeners("firestarter")
+    fire.socket.removeAllListeners("response")
+    fire.socket.removeAllListeners("delete_response")
+    delete fire.model
+    if fire.responses?
+      delete fire.responses
+    super()
 
   editName: (event) =>
     event.preventDefault()
@@ -293,6 +305,8 @@ class ShowFirestarter extends Backbone.View
     if fire.responses?
       for response in fire.responses.models
         @addResponseView(response)
+    $("header .room-users").html(@roomUsersMenu.el)
+    @roomUsersMenu.render()
 
 class EditResponseView extends Backbone.View
   template: _.template $("#editResponseTemplate").html()
@@ -396,33 +410,25 @@ class Router extends Backbone.Router
     'new':     'newFirestarter'
     '':        'index'
 
-  index: ->
-    view = new SplashView()
-    $("#app").html(view.el)
-    view.render()
+  index: =>
+    @view?.remove()
+    @view = new SplashView()
+    $("#app").html(@view.el)
+    @view.render()
 
-  newFirestarter: ->
-    view = new AddFirestarterView()
-    $("#app").html(view.el)
-    view.render()
+  newFirestarter: =>
+    @view?.remove()
+    @view = new AddFirestarterView()
+    $("#app").html(@view.el)
+    @view.render()
 
-  room: (roomName) ->
+  room: (roomName) =>
+    @view?.remove()
     slug = decodeURIComponent(roomName)
 
-    # Disconnect from previous room, if any.
-    if fire.model? and fire.model.get("slug") != roomName
-      socket.emit("leave", {room: fire.model.get("slug")})
-      delete fire.model
-      if fire.responses?
-        delete fire.responses
-    socket.removeAllListeners("firestarter")
-    socket.removeAllListeners("response")
-
-    # Connect to new room.
-    socket.emit("join", {room: slug})
-    view = new ShowFirestarter({slug: slug})
-    $("#app").html(view.el)
-    view.render()
+    @view = new ShowFirestarter({slug: slug})
+    $("#app").html(@view.el)
+    @view.render()
 
 socket = io.connect("/iorooms")
 socket.on "error", (data) ->
@@ -436,3 +442,4 @@ socket.on "connect", ->
     fire.app = new Router()
     Backbone.history.start(pushState: true, silent: false)
     fire.started = true
+

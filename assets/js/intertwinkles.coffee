@@ -13,7 +13,7 @@ class intertwinkles.User extends Backbone.Model
   idAttribute: "id"
 
 #
-# Initial globals
+# User authentication state
 #
 intertwinkles.user = new intertwinkles.User()
 intertwinkles.users = null  # map of intertwinkles user_id to user data
@@ -49,12 +49,12 @@ navigator.id?.watch {
         navigator.id.logout()
         flash "error", data.error or "Error signing in."
 
-    socket_ready = setInterval ->
-      if intertwinkles.socket?
+    if intertwinkles.socket?
+      socket_ready = setInterval ->
         clearInterval(socket_ready)
         intertwinkles.socket.once "login", handle
         intertwinkles.socket.emit "verify", {callback: "login", assertion: assertion}
-    , 50
+      , 50
 
   onlogout: () ->
     console.log "onlogout"
@@ -62,12 +62,12 @@ navigator.id?.watch {
     intertwinkles.users = null
     intertwinkles.groups = null
     intertwinkles.user.clear()
-    socket_ready = setInterval ->
-      if intertwinkles.socket?
+    if intertwinkles.socket?
+      socket_ready = setInterval ->
         clearInterval(socket_ready)
         intertwinkles.socket.once "logout", -> if reload then window.location.pathane = "/"
         intertwinkles.socket.emit "logout", {callback: "logout"}
-    , 50
+      , 50
 }
 
 new_account_template = _.template("
@@ -80,7 +80,8 @@ new_account_template = _.template("
       <p>
       Your new account for the login &ldquo;<%= intertwinkles.user.get('email') %>&rdquo; was created, and you've been given the random icon and name:
       <blockquote>
-        <img src='<%= intertwinkles.user.get('icon').small %>' /> <%= intertwinkles.user.get('name') %>
+        <img src='<%= intertwinkles.user.get('icon').small %>' />
+        <%= intertwinkles.user.get('name') %>
       </blockquote>
       <p>Edit your settings to choose better ones!</p>
       <a class='btn' href='<%= INTERTWINKLES_BASE_URL %>/profiles/edit'>Edit settings</a>
@@ -92,7 +93,7 @@ new_account_template = _.template("
 ")
 
 #
-# User UI
+# User menu
 #
 
 user_menu_template = _.template("
@@ -103,7 +104,9 @@ user_menu_template = _.template("
       <% } else { %>
         <i class='icon-user'></i>
       <% } %>
-      <%= user.name %>
+      <span class='hidden-phone'>
+        <%= user.name %>
+      </span>
       <span class='caret'></span>
     </a>
     <ul class='dropdown-menu' role='menu'>
@@ -127,17 +130,87 @@ class intertwinkles.UserMenu extends Backbone.View
     event.preventDefault()
     navigator.id.logout()
 
+#
+# Room users menu
+#
+
+room_users_menu_template = _.template("
+  <div class='btn-group room-users'>
+    <a class='btn room-menu dropdown-toggle' href='#' data-toggle='dropdown'
+       title='People in this room'>
+      <i class='icon-user'></i><span class='count'></span>
+    </a>
+    <ul class='dropdown-menu' role='menu'></ul>
+  </div>
+")
+room_users_menu_item_template = _.template("
+  <li class='<%= (self ? 'self' : '') %>'><a>
+    <% if (icon) { %>
+      <img src='<%= icon.small %>' />
+    <% } else { %>
+      <i class='icon icon-user'></i>
+    <% } %>
+    <%= name %>
+  </a></li>
+")
+
+class intertwinkles.RoomUsersMenu extends Backbone.View
+  tagName: "span"
+  template: room_users_menu_template
+  item_template: room_users_menu_item_template
+
+  initialize: (options={}) ->
+    @room = options.room
+    intertwinkles.socket.on "room_users", @roomList
+    intertwinkles.socket.emit "join", {room: @room}
+    @list = []
+
+  remove: =>
+    intertwinkles.socket.removeListener "room_users", @roomList
+    intertwinkles.socket.emit "leave", {room: @room}
+
+  roomList: (data) =>
+    @list = data.list
+    if data.anon_id?
+      @anon_id = data.anon_id
+    @renderItems()
+    
+  render: =>
+    @$el.html @template()
+    @renderItems()
+
+  renderItems: =>
+    @$(".count").html(@list.length)
+    @menu = @$(".dropdown-menu")
+    @menu.html("")
+    for item in @list
+      self = item.anon_id == @anon_id
+      context = _.extend {self}, item
+      if self
+        @menu.prepend(@item_template(context))
+      else
+        @menu.append(@item_template(context))
+
+#
+# Toolbar
+#
+
 toolbar_template = _.template("
   <div class='navbar navbar-top nav'>
     <div class='navbar-inner'>
       <div class='container-fluid'>
-
-        <a class='brand' href='/'>
+        <a class='brand visible-phone' href='/'>
+          I<span class'intertwinkles'>T</span>
+          <span class='appname'><%= appname.substr(0, 1) %></span>
+          <span class='label' style='font-size: 50%;'>B</span>
+        </a>
+        <a class='brand hidden-phone' href='/'>
           Inter<span class='intertwinkles'>Twinkles</span>:
           <span class='appname'><%= appname %></span>
           <span class='label' style='font-size: 50%;'>BETA</span>
         </a>
         <div class='pull-right'>
+          <span class='room-users'></span>
           <span class='authentication'></span>
         </div>
       </div>
@@ -179,6 +252,10 @@ class intertwinkles.SignInView extends Backbone.View
 
   signIn: =>
     navigator.id.request()
+
+#
+# User choice widget
+#
 
 user_choice_template = _.template("
   <input type='text' name='name' id='id_user' data-provide='typeahead' autocomplete='off' value='<%= name %>' />
@@ -258,6 +335,43 @@ class intertwinkles.UserChoice extends Backbone.View
       return '<strong>' + match + '</strong>'
     return "<span>#{img} #{highlit}</span>"
 
+#
+# Group choice widget
+#
+
+group_choice_template = _.template("
+  <% if (intertwinkles.user.id) { %>
+    <% if (intertwinkles.groups.length > 0) { %>
+      <select id='id_group'>
+        <option value=''>----</option>
+        <% for (var i = 0; i < intertwinkles.groups.length; i++) { %>
+          <% group = intertwinkles.groups[i]; %>
+          <option val='<%= group.id %>'><%= group.name %></option>
+        <% } %>
+    <% } else { %>
+      You don't have any groups yet.
+    <% } %>
+    <a class='btn' href'<%= INTERTWINKLES_BASE_URL %>/groups/edit'> Add a group</a>
+    <span class='help-text'>Optional</span>
+  <% } else { %>
+    <a class='sign-in' href='#'>
+      <img src='/img/signin.png', alt='Sign in' />
+    </a> to add a group
+  <% } %>
+")
+
+class intertwinkles.GroupChoice extends Backbone.View
+  tagName: "span"
+  template: group_choice_template
+  initialize: (options={}) ->
+  render: =>
+    @$el.html(@template())
+    this
+
+#
+# Utilities
+#
+
 class intertwinkles.AutoUpdatingDate extends Backbone.View
   tagName: "span"
   initialize: (datetime) ->
@@ -296,37 +410,4 @@ intertwinkles.inline_user = (user_id, name) ->
 
 intertwinkles.markup = (response) ->
   return urlize(response, 50, true, _.escapeHTML)
-
-#
-# Group UI
-#
-
-group_choice_template = _.template("
-  <% if (intertwinkles.user.id) { %>
-    <% if (intertwinkles.groups.length > 0) { %>
-      <select id='id_group'>
-        <option value=''>----</option>
-        <% for (var i = 0; i < intertwinkles.groups.length; i++) { %>
-          <% group = intertwinkles.groups[i]; %>
-          <option val='<%= group.id %>'><%= group.name %></option>
-        <% } %>
-    <% } else { %>
-      You don't have any groups yet.
-    <% } %>
-    <a class='btn' href'<%= INTERTWINKLES_BASE_URL %>/groups/edit'> Add a group</a>
-    <span class='help-text'>Optional</span>
-  <% } else { %>
-    <a class='sign-in' href='#'>
-      <img src='/img/signin.png', alt='Sign in' />
-    </a> to add a group
-  <% } %>
-")
-
-class intertwinkles.GroupChoice extends Backbone.View
-  tagName: "span"
-  template: group_choice_template
-  initialize: (options={}) ->
-  render: =>
-    @$el.html(@template())
-    this
 

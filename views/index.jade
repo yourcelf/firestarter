@@ -151,7 +151,11 @@ html(lang="en")
             button.close.modal(type='button', data-dismiss='modal', aria-hidden='true') &times;
             h1 Really delete?
           div.modal-body
-            | Delete the response by <%- intertwinkles.inline_user(user_id, name) %>?
+            p Delete this response by <%- intertwinkles.inline_user(user_id, name) %>?
+            blockquote.response
+              <%- intertwinkles.markup(response) %>
+              
+
           div.modal-footer
             a.btn(href='#', data-dismiss='modal') Close
             a.btn.btn-danger.really-delete(href='#') Delete
