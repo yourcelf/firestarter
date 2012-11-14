@@ -70,7 +70,6 @@ class AddFirestarterView extends Backbone.View
     "submit #new_firestarter_form": "createFirestarter"
     "keyup  #id_slug": "displayURL"
     "change #id_slug": "displayURL"
-    "click .sign-in": "signIn"
 
   initialize: ->
     intertwinkles.user.on "change", @renderGroupControls
@@ -86,9 +85,6 @@ class AddFirestarterView extends Backbone.View
     view = new intertwinkles.GroupChoice()
     @$("#group_controls").html(view.el)
     view.render()
-
-  signIn: ->
-    navigator.id.request()
 
   displayURL: =>
     val = @$("#id_slug").val()

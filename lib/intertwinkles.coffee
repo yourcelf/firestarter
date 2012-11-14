@@ -10,43 +10,47 @@ verify = (assertion, config, callback) ->
   unless config.intertwinkles_api_key?
     throw "Missing required config parameter: intertwinkles_api_key"
 
-  browserid.verify assertion, "#{config.host}:#{config.port}", (err, msg) ->
+  # Two-step operation: first, verify the assertion with Mozilla Persona.
+  # Second, authorize the user with the InterTwinkles api server.
+  #audience = "#{config.host}:#{config.port}"
+  audience = config.intertwinkles_base_url.split("://")[1]
+  browserid.verify assertion, audience, (err, auth) ->
     if (err)
       callback({'error': err})
     else
+      # BrowserID success; now authorize with InterTwinkles.
       api_url = url.parse(config.intertwinkles_base_url + "/api/groups/")
       if api_url.protocol == "https:"
         httplib = require 'https'
       else if api_url.protocol == "http:"
         httplib = require 'http'
 
-      query = {
-        api_key: config.intertwinkles_api_key
-        user: msg.email
-      }
       opts = {
         hostname: api_url.hostname
         port: api_url.port
-        path: "#{api_url.pathname}?#{querystring.stringify(query)}"
+        path: "#{api_url.pathname}?" + querystring.stringify({
+          api_key: config.intertwinkles_api_key
+          user: auth.email
+        })
       }
       req = httplib.get(opts, (res) ->
         res.setEncoding('utf8')
         data = ''
-        res.on 'data', (chunk) ->
-          data += chunk
+        res.on 'data', (chunk) -> data += chunk
         res.on 'end', ->
           if res.statusCode != 200
-            callback(error: "Status #{res.statusCode}")
+            return callback {error: "Status #{res.statusCode}"}
           else
+            # Parse group data, and forward it along to client along with
+            # persona auth.
             try
-              data = JSON.parse(data)
+              groups = JSON.parse(data)
             catch e
-              callback {error: e}
-              return
-            if data.error?
-              callback(data)
+              return callback {error: e}
+            if groups.error?
+              callback(groups)
             else
-              callback(null, msg, data)
+              callback(null, auth, groups)
       ).on "error", (e) -> callback(error: e)
 
 attach = (config, app, iorooms) ->

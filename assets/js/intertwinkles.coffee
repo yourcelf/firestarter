@@ -27,48 +27,63 @@ if INITIAL_DATA.groups?
 #
 # Persona handlers
 #
-navigator.id?.watch {
-  onlogin: (assertion) ->
-    console.log "onlogin"
-    handle = (data) ->
-      if not data.error? and data.email
-        intertwinkles.users = data.groups.users
-        intertwinkles.groups = data.groups.groups
-        user = _.find intertwinkles.users, (e) -> e.email == data.email
-        if user?
-          intertwinkles.user.set(user)
-        else
-          intertwinkles.user.clear()
-      
-      if _.contains data.messages, "NEW_ACCOUNT"
-        modal = $(new_account_template())
-        $("body").append(modal)
-        modal.modal('show')
 
-      if data.error?
-        navigator.id.logout()
-        flash "error", data.error or "Error signing in."
+request_logout = ->
+  frame = $("#auth_frame")[0].contentWindow
+  frame.postMessage {action: 'intertwinkles_logout'}, INTERTWINKLES_BASE_URL
 
-    if intertwinkles.socket?
-      socket_ready = setInterval ->
-        clearInterval(socket_ready)
-        intertwinkles.socket.once "login", handle
-        intertwinkles.socket.emit "verify", {callback: "login", assertion: assertion}
-      , 50
+onlogin = (assertion) ->
+  console.log "onlogin"
+  handle = (data) ->
+    if not data.error? and data.email
+      intertwinkles.users = data.groups.users
+      intertwinkles.groups = data.groups.groups
+      user = _.find intertwinkles.users, (e) -> e.email == data.email
+      if user?
+        intertwinkles.user.set(user)
+      else
+        intertwinkles.user.clear()
+    
+    if _.contains data.messages, "NEW_ACCOUNT"
+      modal = $(new_account_template())
+      $("body").append(modal)
+      modal.modal('show')
 
-  onlogout: () ->
-    console.log "onlogout"
-    reload = intertwinkles.user.get("id")?
-    intertwinkles.users = null
-    intertwinkles.groups = null
-    intertwinkles.user.clear()
-    if intertwinkles.socket?
-      socket_ready = setInterval ->
-        clearInterval(socket_ready)
-        intertwinkles.socket.once "logout", -> if reload then window.location.pathane = "/"
-        intertwinkles.socket.emit "logout", {callback: "logout"}
-      , 50
-}
+    if data.error?
+      request_logout()
+      flash "error", data.error or "Error signing in."
+
+  if intertwinkles.socket?
+    socket_ready = setInterval ->
+      clearInterval(socket_ready)
+      intertwinkles.socket.once "login", handle
+      intertwinkles.socket.emit "verify", {callback: "login", assertion: assertion}
+    , 50
+
+onlogout = ->
+  console.log "onlogout"
+  reload = intertwinkles.user.get("id")?
+  intertwinkles.users = null
+  intertwinkles.groups = null
+  intertwinkles.user.clear()
+  if intertwinkles.socket?
+    socket_ready = setInterval ->
+      clearInterval(socket_ready)
+      intertwinkles.socket.once "logout", -> if reload then window.location.pathane = "/"
+      intertwinkles.socket.emit "logout", {callback: "logout"}
+    , 50
+
+onmessage = (event) ->
+  if event.origin == INTERTWINKLES_BASE_URL
+    switch event.data.action
+      when 'onlogin' then onlogin(event.data.assertion)
+      when 'onlogout' then onlogout()
+window.addEventListener('message', onmessage, false)
+
+$("body").append("<iframe id='auth_frame'
+  src='#{INTERTWINKLES_BASE_URL}/api/auth_frame/'
+  style='position: absolute; right: 5px; top: 5px; border: none; overflow: hidden;'
+  width=97 height=29></iframe>")
 
 new_account_template = _.template("
   <div class='modal hide fade'>
@@ -124,11 +139,16 @@ class intertwinkles.UserMenu extends Backbone.View
     intertwinkles.user.on "change", @render
 
   render: =>
-    @$el.html(@template(user: intertwinkles.user.toJSON()))
+    if intertwinkles.user.get("email")
+      @$el.html(@template(user: intertwinkles.user.toJSON()))
+      $("#auth_frame").hide()
+    else
+      @$el.html("")
+      $("#auth_frame").show()
 
   signOut: (event) =>
     event.preventDefault()
-    navigator.id.logout()
+    request_logout()
 
 #
 # Room users menu
@@ -225,33 +245,10 @@ class intertwinkles.Toolbar extends Backbone.View
 
   render: =>
     @$el.html(@template(appname: @appname))
-    sign_in = new intertwinkles.SignInView()
-    @$(".authentication").html(sign_in.el)
-    sign_in.render()
+    user_menu = new intertwinkles.UserMenu()
+    @$(".authentication").html(user_menu.el)
+    user_menu.render()
     this
-
-class intertwinkles.SignInView extends Backbone.View
-  tagName: "span"
-  events:
-    'click .sign-in': 'signIn'
-
-  initialize: (options={}) ->
-    intertwinkles.user.on "change", @render
-
-  render: =>
-    if intertwinkles.user.get("email")
-      menu = new intertwinkles.UserMenu()
-      @$el.html(menu.el)
-      menu.render()
-    else
-      @$el.html("
-        <a href='#' class='sign-in'>
-          <img src='/img/signin.png' alt='Sign in'/>
-        </a>
-      ")
-
-  signIn: =>
-    navigator.id.request()
 
 #
 # User choice widget
@@ -354,9 +351,7 @@ group_choice_template = _.template("
     <a class='btn' href'<%= INTERTWINKLES_BASE_URL %>/groups/edit'> Add a group</a>
     <span class='help-text'>Optional</span>
   <% } else { %>
-    <a class='sign-in' href='#'>
-      <img src='/img/signin.png', alt='Sign in' />
-    </a> to add a group
+    Sign in to add a group.
   <% } %>
 ")
 
