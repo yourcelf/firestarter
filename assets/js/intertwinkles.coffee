@@ -35,6 +35,7 @@ request_logout = ->
 onlogin = (assertion) ->
   console.log "onlogin"
   handle = (data) ->
+    old_user = intertwinkles.user?.get("email")
     if not data.error? and data.email
       intertwinkles.users = data.groups.users
       intertwinkles.groups = data.groups.groups
@@ -44,10 +45,12 @@ onlogin = (assertion) ->
       else
         intertwinkles.user.clear()
     
-    if _.contains data.messages, "NEW_ACCOUNT"
-      modal = $(new_account_template())
-      $("body").append(modal)
-      modal.modal('show')
+      if _.contains data.messages, "NEW_ACCOUNT"
+        modal = $(new_account_template())
+        $("body").append(modal)
+        modal.modal('show')
+      else if old_user != intertwinkles.user.get("email")
+        flash "info", "Welcome, #{intertwinkles.user.get("name")}"
 
     if data.error?
       request_logout()
@@ -61,17 +64,15 @@ onlogin = (assertion) ->
     , 50
 
 onlogout = ->
-  console.log "onlogout"
-  reload = intertwinkles.user.get("id")?
+  reload = intertwinkles.is_authenticated()
   intertwinkles.users = null
   intertwinkles.groups = null
   intertwinkles.user.clear()
-  if intertwinkles.socket?
-    socket_ready = setInterval ->
-      clearInterval(socket_ready)
-      intertwinkles.socket.once "logout", -> if reload then window.location.pathane = "/"
-      intertwinkles.socket.emit "logout", {callback: "logout"}
-    , 50
+  socket_ready = setInterval ->
+    clearInterval(socket_ready)
+    intertwinkles.socket.once "logout", -> if reload then window.location.pathname = "/"
+    intertwinkles.socket.emit "logout", {callback: "logout"}
+  , 50
 
 onmessage = (event) ->
   if event.origin == INTERTWINKLES_BASE_URL
@@ -79,6 +80,13 @@ onmessage = (event) ->
       when 'onlogin' then onlogin(event.data.assertion)
       when 'onlogout' then onlogout()
 window.addEventListener('message', onmessage, false)
+
+intertwinkles.is_authenticated = ->
+  return intertwinkles.user.get("email")?
+
+#
+# Authentication UI
+#
 
 intertwinkles.auth_frame_template = _.template("<iframe id='auth_frame'
   src='#{INTERTWINKLES_BASE_URL}/api/auth_frame/'
@@ -139,14 +147,14 @@ class intertwinkles.UserMenu extends Backbone.View
 
   render: =>
     @$el.addClass("dropdown")
-    if intertwinkles.user.get("email")
+    if intertwinkles.is_authenticated()
       @$el.html(@template(user: intertwinkles.user.toJSON()))
     else
       @$el.html("")
     @setAuthFrameVisibility()
 
   setAuthFrameVisibility: =>
-    if intertwinkles.user.get("email")
+    if intertwinkles.is_authenticated()
       $("#auth_frame").hide()
     else
       $("#auth_frame").show()
@@ -168,9 +176,9 @@ room_users_menu_template = _.template("
   <ul class='dropdown-menu' role='menu'></ul>
 ")
 room_users_menu_item_template = _.template("
-  <li class='<%= (self ? 'self' : '') %>'><a>
+  <li><a>
     <% if (icon) { %>
-      <img src='<%= icon.small %>' />
+      <img src='<%= icon.tiny %>' />
     <% } else { %>
       <i class='icon icon-user'></i>
     <% } %>
@@ -293,7 +301,7 @@ footer_template = _.template("
         <ul>
           <li><a href='http://lists.byconsens.us/mailman/listinfo/design'>Codesign mailing list</a></li>
           <li><a href='http://project.intertwinkles.org/'>Project tracker</a></li>
-          <li><a href='http://#{INTERTWINKLES_BASE_URL}/about/related/'>Related projects</a></li>
+          <li><a href='#{INTERTWINKLES_BASE_URL}/about/related/'>Related projects</a></li>
         </ul>
       </div>
       <div class='span4 sponsors'>
