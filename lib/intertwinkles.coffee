@@ -120,6 +120,62 @@ attach = (config, app, iorooms) ->
             socket.emit "room_users", users
             socket.broadcast.to(room).emit "room_users", users
 
+    # Edit the more trivial profile details (email, name, color)
+    iorooms.onChannel "edit_profile", (socket, data) ->
+      respond = (err, res) ->
+        if err?
+          if data.callback?
+            socket.emit data.callback, {error: err}
+          else
+            socket.emit "error", {error: err}
+        else if data.callback?
+          socket.emit data.callback, res
+
+      if socket.session.auth.email != data.model.email
+        return respond("Not authorized")
+      if not data.model.name
+        return respond("Invalid name")
+      if not /[0-9a-fA-F]{6}/.test(data.model.icon.color)
+        return respond("Invalid color #{data.model.icon.color}")
+      if isNaN(data.model.icon.id)
+        return respond("Invalid icon id")
+
+      api_url = url.parse(config.intertwinkles_base_url + "/api/profiles/")
+      opts = {
+        hostname: api_url.hostname
+        port: api_url.port
+        path: api_url.pathname
+        method: 'POST'
+      }
+      if api_url.protocol == "https:"
+        httplib = require('https')
+      else if api_url.protocol == "http:"
+        httplib = require('http')
+
+      # Make http request
+      req = httplib.request opts, (res) ->
+        res.setEncoding('utf8')
+        answer = ''
+        res.on 'data', (chunk) -> answer += chunk
+        res.on 'end', ->
+          if res.statusCode == 200
+            profile = JSON.parse(answer)
+            respond(null, model: profile)
+          else
+            respond("InterTwinkles status #{res.statusCode}")
+            console.log(answer)
+      post_data = querystring.stringify({
+        api_key: config.intertwinkles_api_key,
+        user: socket.session.auth.email
+        name: data.model.name
+        icon_id: data.model.icon.id
+        icon_color: data.model.icon.color
+      })
+      req.setHeader("Content-Type", "applicatin/x-www-urlencoded")
+      req.setHeader("Content-Length", post_data.length)
+      req.write(post_data)
+      req.end()
+
     # Join room
     iorooms.on "join", (data) ->
       join = (err) ->
@@ -145,6 +201,7 @@ attach = (config, app, iorooms) ->
       build_room_users_list_for data.room, data.socket.session, (err, users) ->
         if err? then return data.socket.emit "error", {error: err}
         data.socket.broadcast.to(data.room).emit "room_users", users
+
 
   if app?
     null

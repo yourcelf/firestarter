@@ -67,7 +67,7 @@ html(lang="en")
                   | This makes it easier for participants to find, but less private.
             div.control-group
               div.controls
-                input.btn.btn-danger#submit_new_firestarter(type="submit", value="Start")
+                input.btn.btn-large.btn-danger#submit_new_firestarter(type="submit", value="Start")
 
     script(type="text/template", id="splashTemplate")
       div.container-fluid
@@ -86,12 +86,12 @@ html(lang="en")
             div.first-loading
               em Sparking...
               img(src="/img/sparking.gif")
-            h1.hover-edit
-              span.firestarter-name
-              a.edit-link.edit-name(href='#') Edit
             div.byline
               span.firestarter-date
               span.firestarter-participants
+            h1.hover-edit
+              span.firestarter-name
+              a.edit-link.edit-name(href='#') Edit
         div.row-fluid
           div.span6.offset3
             div.well.hover-edit

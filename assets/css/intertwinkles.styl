@@ -58,6 +58,9 @@ cursive-font()
   &:hover
     background-position: 0 0
 
+.help-inline
+  color: #999
+
 
 /*
   Basic styles
@@ -78,7 +81,7 @@ a
 
 a:visited
   color: #0af
-a.btn, a.btn:visited, .dropdown-menu a:visited
+a.btn, a.btn:visited
   color: inherit
   &.btn-primary, &.btn-info, &.btn-success, &.btn-warning, &.btn-danger, &.btn-inverse
     color: white
@@ -154,6 +157,24 @@ it-color = #ff0287
 .btn-group > .btn-small.user-menu
   color: black
 //  font-size: 16px
+
+/*
+  Icon chooser
+*/
+input.color
+  font-size: 0px
+.profile-image-chooser
+  .profile-image
+    float: left
+    width: 32px
+    height: 32px
+    border: 1px solid #eee
+    position: relative
+    font-size: 0px
+    &:hover
+      border: 1px solid #ff9900
+    &.chosen
+      background-color: #ff9900
   
 
 /*

@@ -3,6 +3,7 @@
 #= require vendor/underscore-autoescape
 #= require vendor/backbone
 #= require vendor/date.js
+#= require vendor/jscolor/jscolor.js
 #= require ../bootstrap/js/bootstrap-transition.js
 #= require ../bootstrap/js/bootstrap-dropdown.js
 #= require flash
@@ -28,7 +29,7 @@ if INITIAL_DATA.groups?
 # Persona handlers
 #
 
-request_logout = ->
+intertwinkles.request_logout = ->
   frame = $("#auth_frame")[0].contentWindow
   frame.postMessage {action: 'intertwinkles_logout'}, INTERTWINKLES_BASE_URL
 
@@ -46,14 +47,18 @@ onlogin = (assertion) ->
         intertwinkles.user.clear()
     
       if _.contains data.messages, "NEW_ACCOUNT"
-        modal = $(new_account_template())
-        $("body").append(modal)
-        modal.modal('show')
+        #modal = $(new_account_template())
+        #$("body").append(modal)
+        #modal.modal('show')
+        profile_editor = new intertwinkles.EditNewProfile()
+        $("body").append(profile_editor.el)
+        profile_editor.render()
+        profile_editor.on "done", -> profile_editor.remove()
       else if old_user != intertwinkles.user.get("email")
         flash "info", "Welcome, #{intertwinkles.user.get("name")}"
 
     if data.error?
-      request_logout()
+      intertwinkles.request_logout()
       flash "error", data.error or "Error signing in."
 
   if intertwinkles.socket?
@@ -114,6 +119,154 @@ new_account_template = _.template("
   </div>
 ")
 
+edit_new_profile_template = _.template("
+  <div class='modal hide fade'>
+    <div class='modal-body'>
+      <h1 style='text-align: center;'>Ready in 1, 2, 3:</h1><br />
+      <div class='control-group'>
+        <b>1: What is your name?</b><br />
+        <input type='text' name='name' value='<%= name %>' />
+      </div>
+      <div class='control-group'>
+        <b>2: What is your favorite color?</b><br />
+        <input type='text' name='color' value='<%= color %>' class='color' />
+        <span class='help-text color-label'></span>
+      </div>
+      <div class='control-group'>
+        <b>3. Which icon do you like the best?</b><br />
+        <div class='image-chooser'></div>
+      </div>
+    </div>
+    <div class='modal-footer'>
+      <input type='submit' value='OK, Ready, Go!' class='btn btn-primary btn-large' />
+    </div>
+  </div>
+")
+
+class intertwinkles.EditNewProfile extends Backbone.View
+  template: edit_new_profile_template
+  events:
+    'click input[type=submit]': 'saveProfile'
+  render: =>
+    name = intertwinkles.user.get("name")
+    icon = intertwinkles.user.get("icon")
+    if icon?
+      color = icon.color
+      icon_id = icon.id
+    else
+      color = ""
+      icon_id = ""
+    @$el.html(@template({name, color}))
+    chooser = new intertwinkles.IconChooser(chosen: icon_id)
+    @$(".image-chooser").html(chooser.el)
+    chooser.render()
+    @$(".modal").modal("show")
+    name_color = =>
+      @$(".color-label").html(intertwinkles.match_color(@$(".color").val()))
+    @$(".color").on "change", name_color
+    name_color()
+
+    # Make it bigger.
+    #width = Math.max(@$(".modal").width(), $(window).width() * 0.8)
+    #height = Math.max(@$(".modal").height(), $(window).height() * 0.8)
+    #@$(".modal").css({
+    #  width: width + "px"
+    #  "margin-left": -(width / 2) + "px"
+    #  "top": (height / 2) + "px"
+    #})
+    #@$(".modal-body").css({
+    #  "max-height": (height - 48) + "px"
+    #})
+    this
+
+  saveProfile: =>
+    new_name = @$("input[name=name]").val()
+    new_icon = @$("input[name=icon]").val()
+    console.log(new_icon)
+    new_color = @$("input[name=color]").val()
+    @$(".error-msg").remove()
+    @$("input[type=submit]").addClass("loading")
+    errors = []
+    console.log "OH HAI"
+    if not new_name
+      errors.push({field: "name", message: "Please choose a name."})
+    if not new_icon
+      errors.push({field: "icon", message: "Please choose an icon."})
+    if not new_color or not /[a-f0-9A-F]{6}/.exec(new_color)?
+      errors.push({field: "color", message: "Invalid color..."})
+    if errors.length != 0
+      console.log errors
+      for error in errors
+        @$("input[name=#{error.field}]").parent().addClass("error")
+        @$("input[name=#{error.field}]").after(
+          "<span class='help-inline error-msg'>#{error.message}</span>"
+        )
+        @$("input[type=submit]").removeClass("loading")
+    else
+      intertwinkles.socket.once "profile_updated", (data) =>
+        @$("input[type=submit]").removeClass("loading")
+        if data.error?
+          flash "error", "Oh Noes... Server errorrrrrrr........."
+          console.log(data)
+          @$(".modal").modal("hide")
+          @trigger "done"
+        else
+          intertwinkles.user.set(data.model)
+          @$(".modal").modal("hide")
+          @trigger "done"
+
+      intertwinkles.socket.emit "edit_profile", {
+        callback: "profile_updated"
+        model: {
+          email: intertwinkles.user.get("email")
+          name: new_name
+          icon: { id: new_icon, color: new_color }
+        }
+      }
+
+#
+# Icon Chooser widget
+#
+
+icon_chooser_template = _.template("
+  <input name='icon' id='id_icon' value='<%= chosen %>' type='hidden' />
+  <div class='profile-image-chooser'><img src='/img/spinner.gif' alt='Loading...'/></div>
+  <div>
+    <a class='attribution-link' href='#{INTERTWINKLES_BASE_URL}/profiles/icon_attribution/'>
+      About these icons
+    </a>
+  </div>
+  <div style='clear: both;'></div>
+")
+
+class intertwinkles.IconChooser extends Backbone.View
+  template: icon_chooser_template
+  chooser_image: "#{INTERTWINKLES_BASE_URL}/media/profile_icons/chooser.png"
+  initialize: (options={}) ->
+    @chosen = options.chosen
+
+  render: =>
+    @$el.html(@template(chosen: @chosen or ""))
+    $.get "/js/intertwinkles_icon_chooser.json", (data) =>
+      icon_holder = @$(".profile-image-chooser")
+      icon_holder.html("")
+      _.each data, (def, i) =>
+        cls = "profile-image"
+        cls += " chosen" if @chosen == def.pk
+        icon = $("<div/>").html(def.name).attr({ "class": cls }).css {
+          "background-image": "url('#{@chooser_image}')"
+          "background-position": "#{-32 * i}px 0px"
+        }
+        icon.on "click", =>
+          @$(".profile-image.chosen").removeClass("chosen")
+          icon.addClass("chosen")
+          @$("input[name=icon]").val(def.pk)
+          @chosen = def.pk
+          console.log @$("input[name=icon]")
+        icon_holder.append(icon)
+      icon_holder.append("<div style='clear: both;'></div>")
+    jscolor.bind()
+
 #
 # User menu
 #
@@ -133,7 +286,7 @@ user_menu_template = _.template("
   <ul class='dropdown-menu' role='menu'>
     <li><a tabindex='-1' href='<%= INTERTWINKLES_BASE_URL %>/profiles/edit'><i class='icon icon-cog'></i> Settings</a></li>
     <li class='divider'></li>
-    <li><a class='sign-out' href='#'>Sign out</a></li>
+    <li><a tabindex='-1' class='sign-out' href='#'>Sign out</a></li>
   </ul>
 ")
 class intertwinkles.UserMenu extends Backbone.View
@@ -161,7 +314,7 @@ class intertwinkles.UserMenu extends Backbone.View
 
   signOut: (event) =>
     event.preventDefault()
-    request_logout()
+    intertwinkles.request_logout()
 
 #
 # Room users menu
@@ -410,7 +563,7 @@ class intertwinkles.UserChoice extends Backbone.View
 #
 
 group_choice_template = _.template("
-  <% if (intertwinkles.user.id) { %>
+  <% if (intertwinkles.is_authenticated()) { %>
     <% if (intertwinkles.groups.length > 0) { %>
       <select id='id_group'>
         <option value=''>----</option>
@@ -418,11 +571,12 @@ group_choice_template = _.template("
           <% group = intertwinkles.groups[i]; %>
           <option val='<%= group.id %>'><%= group.name %></option>
         <% } %>
+      </select>
     <% } else { %>
       You don't have any groups yet.
     <% } %>
-    <a class='btn' href'<%= INTERTWINKLES_BASE_URL %>/groups/edit'> Add a group</a>
-    <span class='help-text'>Optional</span>
+    <span class='help-inline'>Optional</span><br />
+    (or <a href='<%= INTERTWINKLES_BASE_URL %>/groups/edit'>create a new group</a>)
   <% } else { %>
     Sign in to add a group.
   <% } %>
@@ -479,6 +633,161 @@ intertwinkles.inline_user = (user_id, name) ->
 intertwinkles.markup = (response) ->
   return urlize(response, 50, true, _.escapeHTML)
 
+html_colors = [
+  [0x80, 0x00, 0x00, "maroon"],
+  [0x8B, 0x00, 0x00, "darkred"],
+  [0xFF, 0x00, 0x00, "red"],
+  [0xFF, 0xB6, 0xC1, "lightpink"],
+  [0xDC, 0x14, 0x3C, "crimson"],
+  [0xDB, 0x70, 0x93, "palevioletred"],
+  [0xFF, 0x69, 0xB4, "hotpink"],
+  [0xFF, 0x14, 0x93, "deeppink"],
+  [0xC7, 0x15, 0x85, "mediumvioletred"],
+  [0x80, 0x00, 0x80, "purple"],
+  [0x8B, 0x00, 0x8B, "darkmagenta"],
+  [0xDA, 0x70, 0xD6, "orchid"],
+  [0xD8, 0xBF, 0xD8, "thistle"],
+  [0xDD, 0xA0, 0xDD, "plum"],
+  [0xEE, 0x82, 0xEE, "violet"],
+  [0xFF, 0x00, 0xFF, "fuchsia"],
+  [0xFF, 0x00, 0xFF, "magenta"],
+  [0xBA, 0x55, 0xD3, "mediumorchid"],
+  [0x94, 0x00, 0xD3, "darkviolet"],
+  [0x99, 0x32, 0xCC, "darkorchid"],
+  [0x8A, 0x2B, 0xE2, "blueviolet"],
+  [0x4B, 0x00, 0x82, "indigo"],
+  [0x93, 0x70, 0xDB, "mediumpurple"],
+  [0x6A, 0x5A, 0xCD, "slateblue"],
+  [0x7B, 0x68, 0xEE, "mediumslateblue"],
+  [0x00, 0x00, 0x8B, "darkblue"],
+  [0x00, 0x00, 0xCD, "mediumblue"],
+  [0x00, 0x00, 0xFF, "blue"],
+  [0x00, 0x00, 0x80, "navy"],
+  [0x19, 0x19, 0x70, "midnightblue"],
+  [0x48, 0x3D, 0x8B, "darkslateblue"],
+  [0x41, 0x69, 0xE1, "royalblue"],
+  [0x64, 0x95, 0xED, "cornflowerblue"],
+  [0xB0, 0xC4, 0xDE, "lightsteelblue"],
+  [0xF0, 0xF8, 0xFF, "aliceblue"],
+  [0xF8, 0xF8, 0xFF, "ghostwhite"],
+  [0xE6, 0xE6, 0xFA, "lavender"],
+  [0x1E, 0x90, 0xFF, "dodgerblue"],
+  [0x46, 0x82, 0xB4, "steelblue"],
+  [0x00, 0xBF, 0xFF, "deepskyblue"],
+  [0x70, 0x80, 0x90, "slategray"],
+  [0x77, 0x88, 0x99, "lightslategray"],
+  [0x87, 0xCE, 0xFA, "lightskyblue"],
+  [0x87, 0xCE, 0xEB, "skyblue"],
+  [0xAD, 0xD8, 0xE6, "lightblue"],
+  [0x00, 0x80, 0x80, "teal"],
+  [0x00, 0x8B, 0x8B, "darkcyan"],
+  [0x00, 0xCE, 0xD1, "darkturquoise"],
+  [0x00, 0xFF, 0xFF, "cyan"],
+  [0x48, 0xD1, 0xCC, "mediumturquoise"],
+  [0x5F, 0x9E, 0xA0, "cadetblue"],
+  [0xAF, 0xEE, 0xEE, "paleturquoise"],
+  [0xE0, 0xFF, 0xFF, "lightcyan"],
+  [0xF0, 0xFF, 0xFF, "azure"],
+  [0x20, 0xB2, 0xAA, "lightseagreen"],
+  [0x40, 0xE0, 0xD0, "turquoise"],
+  [0xB0, 0xE0, 0xE6, "powderblue"],
+  [0x2F, 0x4F, 0x4F, "darkslategray"],
+  [0x7F, 0xFF, 0xD4, "aquamarine"],
+  [0x00, 0xFA, 0x9A, "mediumspringgreen"],
+  [0x66, 0xCD, 0xAA, "mediumaquamarine"],
+  [0x00, 0xFF, 0x7F, "springgreen"],
+  [0x3C, 0xB3, 0x71, "mediumseagreen"],
+  [0x2E, 0x8B, 0x57, "seagreen"],
+  [0x32, 0xCD, 0x32, "limegreen"],
+  [0x00, 0x64, 0x00, "darkgreen"],
+  [0x00, 0x80, 0x00, "green"],
+  [0x00, 0xFF, 0x00, "lime"],
+  [0x22, 0x8B, 0x22, "forestgreen"],
+  [0x8F, 0xBC, 0x8F, "darkseagreen"],
+  [0x90, 0xEE, 0x90, "lightgreen"],
+  [0x98, 0xFB, 0x98, "palegreen"],
+  [0xF5, 0xFF, 0xFA, "mintcream"],
+  [0xF0, 0xFF, 0xF0, "honeydew"],
+  [0x7F, 0xFF, 0x00, "chartreuse"],
+  [0x7C, 0xFC, 0x00, "lawngreen"],
+  [0x6B, 0x8E, 0x23, "olivedrab"],
+  [0x55, 0x6B, 0x2F, "darkolivegreen"],
+  [0x9A, 0xCD, 0x32, "yellowgreen"],
+  [0xAD, 0xFF, 0x2F, "greenyellow"],
+  [0xF5, 0xF5, 0xDC, "beige"],
+  [0xFA, 0xF0, 0xE6, "linen"],
+  [0xFA, 0xFA, 0xD2, "lightgoldenrodyellow"],
+  [0x80, 0x80, 0x00, "olive"],
+  [0xFF, 0xFF, 0x00, "yellow"],
+  [0xFF, 0xFF, 0xE0, "lightyellow"],
+  [0xFF, 0xFF, 0xF0, "ivory"],
+  [0xBD, 0xB7, 0x6B, "darkkhaki"],
+  [0xF0, 0xE6, 0x8C, "khaki"],
+  [0xEE, 0xE8, 0xAA, "palegoldenrod"],
+  [0xF5, 0xDE, 0xB3, "wheat"],
+  [0xFF, 0xD7, 0x00, "gold"],
+  [0xFF, 0xFA, 0xCD, "lemonchiffon"],
+  [0xFF, 0xEF, 0xD5, "papayawhip"],
+  [0xB8, 0x86, 0x0B, "darkgoldenrod"],
+  [0xDA, 0xA5, 0x20, "goldenrod"],
+  [0xFA, 0xEB, 0xD7, "antiquewhite"],
+  [0xFF, 0xF8, 0xDC, "cornsilk"],
+  [0xFD, 0xF5, 0xE6, "oldlace"],
+  [0xFF, 0xE4, 0xB5, "moccasin"],
+  [0xFF, 0xDE, 0xAD, "navajowhite"],
+  [0xFF, 0xA5, 0x00, "orange"],
+  [0xFF, 0xE4, 0xC4, "bisque"],
+  [0xD2, 0xB4, 0x8C, "tan"],
+  [0xFF, 0x8C, 0x00, "darkorange"],
+  [0xDE, 0xB8, 0x87, "burlywood"],
+  [0x8B, 0x45, 0x13, "saddlebrown"],
+  [0xF4, 0xA4, 0x60, "sandybrown"],
+  [0xFF, 0xEB, 0xCD, "blanchedalmond"],
+  [0xFF, 0xF0, 0xF5, "lavenderblush"],
+  [0xFF, 0xF5, 0xEE, "seashell"],
+  [0xFF, 0xFA, 0xF0, "floralwhite"],
+  [0xFF, 0xFA, 0xFA, "snow"],
+  [0xCD, 0x85, 0x3F, "peru"],
+  [0xFF, 0xDA, 0xB9, "peachpuff"],
+  [0xD2, 0x69, 0x1E, "chocolate"],
+  [0xA0, 0x52, 0x2D, "sienna"],
+  [0xFF, 0xA0, 0x7A, "lightsalmon"],
+  [0xFF, 0x7F, 0x50, "coral"],
+  [0xE9, 0x96, 0x7A, "darksalmon"],
+  [0xFF, 0xE4, 0xE1, "mistyrose"],
+  [0xFF, 0x45, 0x00, "orangered"],
+  [0xFA, 0x80, 0x72, "salmon"],
+  [0xFF, 0x63, 0x47, "tomato"],
+  [0xBC, 0x8F, 0x8F, "rosybrown"],
+  [0xFF, 0xC0, 0xCB, "pink"],
+  [0xCD, 0x5C, 0x5C, "indianred"],
+  [0xF0, 0x80, 0x80, "lightcoral"],
+  [0xA5, 0x2A, 0x2A, "brown"],
+  [0xB2, 0x22, 0x22, "firebrick"],
+  [0x00, 0x00, 0x00, "black"],
+  [0x69, 0x69, 0x69, "dimgray"],
+  [0x80, 0x80, 0x80, "gray"],
+  [0xA9, 0xA9, 0xA9, "darkgray"],
+  [0xC0, 0xC0, 0xC0, "silver"],
+  [0xD3, 0xD3, 0xD3, "lightgrey"],
+  [0xDC, 0xDC, 0xDC, "gainsboro"],
+  [0xF5, 0xF5, 0xF5, "whitesmoke"],
+  [0xFF, 0xFF, 0xFF, "white"],
+]
+intertwinkles.match_color = (hexstr) ->
+  r1 = parseInt(hexstr[0...2], 16)
+  g1 = parseInt(hexstr[2...4], 16)
+  b1 = parseInt(hexstr[4...6], 16)
+  distance = 255 * 3
+  best = html_colors[0][3]
+  for [r2, g2, b2, name] in html_colors
+    # Lame, lame, RGB based additive distance.  Not great.
+    diff = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2)
+    if diff < distance
+      distance = diff
+      best = name
+  return best
+
 $(document).ready ->
   $("span.intertwinkles").on "mouseover", ->
     $el = $(this)
@@ -511,4 +820,5 @@ $(document).ready ->
     mod.on('hidden', -> mod.remove())
     mod.modal()
     return false
+
 
