@@ -26,6 +26,8 @@ html(lang="en")
       div#app
         em Sparking...
         img(src="/img/sparking.gif")
+      div#push
+    footer
 
     <script type='text/javascript'>
     != "var INITIAL_DATA = " + JSON.stringify(initial_data) + ";"
@@ -90,6 +92,8 @@ html(lang="en")
             div.byline
               span.firestarter-date
               span.firestarter-participants
+        div.row-fluid
+          div.span6.offset3
             div.well.hover-edit
               span.firestarter-prompt
               a.edit-link.edit-prompt(href='#') Edit
@@ -162,7 +166,6 @@ html(lang="en")
 
       div(style='clear: both;')
 
-    script(src="https://login.persona.org/include.js")
     script(src="/socket.io/socket.io.js", type="text/javascript")
     !=js('frontend')
     include analytics.html

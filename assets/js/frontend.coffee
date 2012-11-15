@@ -21,7 +21,8 @@
 
 fire = {}
 
-$("header").html(new intertwinkles.Toolbar(appname: "Firestarter").render().el)
+intertwinkles.build_toolbar($("header"), {appname: "Firestarter"})
+intertwinkles.build_footer($("footer"))
 
 class Firestarter extends Backbone.Model
   idAttribute: "_id"
@@ -301,7 +302,7 @@ class ShowFirestarter extends Backbone.View
     if fire.responses?
       for response in fire.responses.models
         @addResponseView(response)
-    $("header .room-users").html(@roomUsersMenu.el)
+    $("header .room-users").replaceWith(@roomUsersMenu.el)
     @roomUsersMenu.render()
 
 class EditResponseView extends Backbone.View

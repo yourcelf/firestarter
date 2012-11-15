@@ -80,10 +80,9 @@ onmessage = (event) ->
       when 'onlogout' then onlogout()
 window.addEventListener('message', onmessage, false)
 
-$("body").append("<iframe id='auth_frame'
+intertwinkles.auth_frame_template = _.template("<iframe id='auth_frame'
   src='#{INTERTWINKLES_BASE_URL}/api/auth_frame/'
-  style='position: absolute; right: 5px; top: 5px; border: none; overflow: hidden;'
-  width=97 height=29></iframe>")
+  style='border: none; overflow: hidden;' width=97 height=29></iframe>")
 
 new_account_template = _.template("
   <div class='modal hide fade'>
@@ -112,25 +111,25 @@ new_account_template = _.template("
 #
 
 user_menu_template = _.template("
-  <div class='btn-group'>
-    <a class='btn user-menu dropdown-toggle' href='#' data-toggle='dropdown'>
-      <% if (user.icon && user.icon.small) { %>
-        <img src='<%= user.icon.small %>' alt='<%= user.icon.color %> <%= user.icon.name %>' />
-      <% } else { %>
-        <i class='icon-user'></i>
-      <% } %>
-      <span class='hidden-phone'>
-        <%= user.name %>
-      </span>
-      <span class='caret'></span>
-    </a>
-    <ul class='dropdown-menu' role='menu'>
-      <li><a tabindex='-1' href='<%= INTERTWINKLES_BASE_URL %>/profiles/edit'>Settings</a></li>
-      <li><a class='sign-out' href='#'>Sign out</a></li>
-    </ul>
-  </div>
+  <a class='user-menu dropdown-toggle' href='#' data-toggle='dropdown' role='button'>
+    <% if (user.icon && user.icon.tiny) { %>
+      <img src='<%= user.icon.tiny %>' alt='<%= user.icon.color %> <%= user.icon.name %>' />
+    <% } else { %>
+      <i class='icon-user'></i>
+    <% } %>
+    <span class='hidden-phone'>
+      <%= user.name %>
+    </span>
+    <b class='caret'></b>
+  </a>
+  <ul class='dropdown-menu' role='menu'>
+    <li><a tabindex='-1' href='<%= INTERTWINKLES_BASE_URL %>/profiles/edit'><i class='icon icon-cog'></i> Settings</a></li>
+    <li class='divider'></li>
+    <li><a class='sign-out' href='#'>Sign out</a></li>
+  </ul>
 ")
 class intertwinkles.UserMenu extends Backbone.View
+  tagName: 'li'
   template: user_menu_template
   events:
     'click .sign-out': 'signOut'
@@ -139,11 +138,17 @@ class intertwinkles.UserMenu extends Backbone.View
     intertwinkles.user.on "change", @render
 
   render: =>
+    @$el.addClass("dropdown")
     if intertwinkles.user.get("email")
       @$el.html(@template(user: intertwinkles.user.toJSON()))
-      $("#auth_frame").hide()
     else
       @$el.html("")
+    @setAuthFrameVisibility()
+
+  setAuthFrameVisibility: =>
+    if intertwinkles.user.get("email")
+      $("#auth_frame").hide()
+    else
       $("#auth_frame").show()
 
   signOut: (event) =>
@@ -155,13 +160,12 @@ class intertwinkles.UserMenu extends Backbone.View
 #
 
 room_users_menu_template = _.template("
-  <div class='btn-group room-users'>
-    <a class='btn room-menu dropdown-toggle' href='#' data-toggle='dropdown'
-       title='People in this room'>
-      <i class='icon-user'></i><span class='count'></span>
-    </a>
-    <ul class='dropdown-menu' role='menu'></ul>
-  </div>
+  <a class='room-menu dropdown-toggle' href='#' data-toggle='dropdown'
+     title='People in this room'>
+    <i class='icon-user'></i><span class='count'></span>
+    <b class='caret'></b>
+  </a>
+  <ul class='dropdown-menu' role='menu'></ul>
 ")
 room_users_menu_item_template = _.template("
   <li class='<%= (self ? 'self' : '') %>'><a>
@@ -175,7 +179,7 @@ room_users_menu_item_template = _.template("
 ")
 
 class intertwinkles.RoomUsersMenu extends Backbone.View
-  tagName: "span"
+  tagName: "li"
   template: room_users_menu_template
   item_template: room_users_menu_item_template
 
@@ -196,6 +200,7 @@ class intertwinkles.RoomUsersMenu extends Backbone.View
     @renderItems()
     
   render: =>
+    @$el.addClass("room-users dropdown")
     @$el.html @template()
     @renderItems()
 
@@ -210,17 +215,25 @@ class intertwinkles.RoomUsersMenu extends Backbone.View
         @menu.prepend(@item_template(context))
       else
         @menu.append(@item_template(context))
+    @menu.prepend("<li><a>Online now:</a></li>")
 
 #
 # Toolbar
 #
+
+intertwinkles.build_toolbar = (destination, options) ->
+  toolbar = new intertwinkles.Toolbar(options)
+  $(destination).html(toolbar.el)
+  toolbar.render()
+  $(".auth_frame").html(intertwinkles.auth_frame_template())
+  toolbar.setAuthFrameVisibility()
 
 toolbar_template = _.template("
   <div class='navbar navbar-top nav'>
     <div class='navbar-inner'>
       <div class='container-fluid'>
         <a class='brand visible-phone' href='/'>
-          I<span class'intertwinkles'>T</span>
+          I<span class='intertwinkles'>T</span>
           <span class='appname'><%= appname.substr(0, 1) %></span>
           <span class='label' style='font-size: 50%;'>B</span>
         </a>
@@ -229,10 +242,12 @@ toolbar_template = _.template("
           <span class='appname'><%= appname %></span>
           <span class='label' style='font-size: 50%;'>BETA</span>
         </a>
-        <div class='pull-right'>
-          <span class='room-users'></span>
-          <span class='authentication'></span>
-        </div>
+        <ul class='nav pull-right'>
+          <li class='notifications dropdown'></li>
+          <li class='room-users dropdown'></li>
+          <li class='user-menu dropdown'></li>
+          <li class='auth_frame'></li>
+        </ul>
       </div>
     </div>
   </div>
@@ -245,10 +260,60 @@ class intertwinkles.Toolbar extends Backbone.View
 
   render: =>
     @$el.html(@template(appname: @appname))
-    user_menu = new intertwinkles.UserMenu()
-    @$(".authentication").html(user_menu.el)
-    user_menu.render()
+    @user_menu = new intertwinkles.UserMenu()
+    @$(".user-menu.dropdown").replaceWith(@user_menu.el)
+    @user_menu.render()
     this
+
+  setAuthFrameVisibility: => @user_menu.setAuthFrameVisibility()
+
+#
+# Footer
+#
+
+footer_template = _.template("
+<div class='bg'>
+  <img src='#{INTERTWINKLES_BASE_URL}/static/img/coop-world.png' alt='Flavor image' />
+</div>
+<div class='container-fluid'>
+  <div class='ramp'></div>
+  <div class='footer-content'>
+    <div class='row-fluid'>
+      <div class='span4 about-links'>
+        <h2>About</h2>
+        <ul>
+          <li><a href='#{INTERTWINKLES_BASE_URL}/about/'>About</a><small>: Free software revolutionary research</small></li>
+          <li><a href='#{INTERTWINKLES_BASE_URL}/about/terms/'>Terms of Use</a><small>: Play nice</small></li>
+          <li><a href='#{INTERTWINKLES_BASE_URL}/about/privacy/'>Privacy Policy</a><small>: You own it</small></li>
+          <li><a href='http://bitbucket.org/yourcelf/intertwinkles/'>Source Code</a><small>: Run your own!</small></li>
+        </ul>
+      </div>
+      <div class='span4 community'>
+        <h2>Community</h2>
+        <ul>
+          <li><a href='http://lists.byconsens.us/mailman/listinfo/design'>Codesign mailing list</a></li>
+          <li><a href='http://project.intertwinkles.org/'>Project tracker</a></li>
+          <li><a href='http://#{INTERTWINKLES_BASE_URL}/about/related/'>Related projects</a></li>
+        </ul>
+      </div>
+      <div class='span4 sponsors'>
+        <h2>Supported by</h2>
+        <a href='http://civic.mit.edu'>
+          <img alt='The MIT Center for Civic Media' src='#{INTERTWINKLES_BASE_URL}/static/img/C4CM.png'>
+        </a>
+        and
+        <a href='http://media.mit.edu/speech'>
+          <img alt='The Speech + Mobility Group' src='#{INTERTWINKLES_BASE_URL}/static/img/S_M.png'>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+")
+
+intertwinkles.build_footer = (destination) ->
+  $(destination).html(footer_template())
+
 
 #
 # User choice widget
@@ -405,4 +470,37 @@ intertwinkles.inline_user = (user_id, name) ->
 
 intertwinkles.markup = (response) ->
   return urlize(response, 50, true, _.escapeHTML)
+
+$(document).ready ->
+  $("span.intertwinkles").on "mouseover", ->
+    $el = $(this)
+    unless $el.hasClass("twunkled")
+      $el.addClass("twunkled")
+      letters = $el.text()
+      spans = []
+      for i in [0...letters.length]
+        spans.push("<span>#{letters.substr(i, 1)}</span>")
+      $el.html(spans.join(""))
+    $el.find("span").each (i, el)->
+      setTimeout( ->
+        el.className = "bump"
+        setTimeout((-> el.className = ""), 100)
+      , i * 50)
+
+  $(".modal-video").on "click", ->
+    width = parseInt($(this).attr("data-width"))
+    height = parseInt($(this).attr("data-height"))
+    mod = $("<div class='modal' role='dialog'></div>").css {
+      display: "none"
+      width: "#{width + 10}px"
+      height: "#{height + 10}px"
+      "background-color": "black"
+      "text-align": "center"
+      padding: "5px 5px 5px 5px"
+    }
+    mod.append("<iframe width='#{width}' height='#{height}' src='#{$(this).attr("data-url")}?autoplay=1&cc_load_policy=1' frameborder='0' allowfullscreen></iframe>")
+    $("body").append(mod)
+    mod.on('hidden', -> mod.remove())
+    mod.modal()
+    return false
 

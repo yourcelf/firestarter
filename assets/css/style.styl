@@ -1,29 +1,12 @@
 // Mixins
 @import "nib"
-@import "buttons.css"
-@import "flash.styl"
-
-border-box()
-  -webkit-box-sizing: border-box
-  -moz-box-sizing: border-box
-  box-sizing: border-box
-
-user-select()
-  -webkit-touch-callout: none
-  -webkit-user-select: none
-  -khtml-user-select: none
-  -moz-user-select: none
-  -ms-user-select: none
-  user-select: none
+//@import "buttons.css"
+@import "flash"
+@import "intertwinkles"
+//
 
 h1, h3
   font-family: "Indie Flower"
-
-.btn.loading
-  background-image: url("/img/spinner.gif")
-  background-repeat: no-repeat
-  &:hover
-    background-position: 0 0
 
 .firestarter-url
   color: green
@@ -32,11 +15,6 @@ h1, h3
 
 .modal-body
   max-height: 450px
-
-.date
-  font-size: 80%
-  color: #aaa
-  font-family: sans-serif
 
 .firestarter-response
   text-align: left
@@ -78,10 +56,3 @@ h1, h3
     font-weight: normal
     float: right
     visibility: hidden
-
-.typeahead
-  z-index: 1051
-
-.room-users
-  li.self
-    font-size: 120%
