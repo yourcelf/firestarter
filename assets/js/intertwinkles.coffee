@@ -93,11 +93,11 @@ intertwinkles.is_authenticated = ->
 # Authentication UI
 #
 
-intertwinkles.auth_frame_template = _.template("<iframe id='auth_frame'
+intertwinkles.auth_frame_template = _.template("""<iframe id='auth_frame'
   src='#{INTERTWINKLES_BASE_URL}/api/auth_frame/'
-  style='border: none; overflow: hidden;' width=97 height=29></iframe>")
+  style='border: none; overflow: hidden;' width=97 height=29></iframe>""")
 
-new_account_template = _.template("
+new_account_template = _.template("""
   <div class='modal hide fade'>
     <div class='modal-header'>
       <button type='button' class='close' data-dismiss='modal' aria-hidden='true'>&times;</button>
@@ -117,9 +117,9 @@ new_account_template = _.template("
       <a href='#' class='btn' data-dismiss='modal'>Close</a>
     </div>
   </div>
-")
+""")
 
-edit_new_profile_template = _.template("
+edit_new_profile_template = _.template("""
   <div class='modal hide fade'>
     <div class='modal-body'>
       <h1 style='text-align: center;'>Ready in 1, 2, 3:</h1><br />
@@ -141,7 +141,7 @@ edit_new_profile_template = _.template("
       <input type='submit' value='OK, Ready, Go!' class='btn btn-primary btn-large' />
     </div>
   </div>
-")
+""")
 
 class intertwinkles.EditNewProfile extends Backbone.View
   template: edit_new_profile_template
@@ -182,12 +182,10 @@ class intertwinkles.EditNewProfile extends Backbone.View
   saveProfile: =>
     new_name = @$("input[name=name]").val()
     new_icon = @$("input[name=icon]").val()
-    console.log(new_icon)
     new_color = @$("input[name=color]").val()
     @$(".error-msg").remove()
     @$("input[type=submit]").addClass("loading")
     errors = []
-    console.log "OH HAI"
     if not new_name
       errors.push({field: "name", message: "Please choose a name."})
     if not new_icon
@@ -228,7 +226,7 @@ class intertwinkles.EditNewProfile extends Backbone.View
 # Icon Chooser widget
 #
 
-icon_chooser_template = _.template("
+icon_chooser_template = _.template("""
   <input name='icon' id='id_icon' value='<%= chosen %>' type='hidden' />
   <div class='profile-image-chooser'><img src='/img/spinner.gif' alt='Loading...'/></div>
   <div>
@@ -237,7 +235,7 @@ icon_chooser_template = _.template("
     </a>
   </div>
   <div style='clear: both;'></div>
-")
+""")
 
 class intertwinkles.IconChooser extends Backbone.View
   template: icon_chooser_template
@@ -262,7 +260,6 @@ class intertwinkles.IconChooser extends Backbone.View
           icon.addClass("chosen")
           @$("input[name=icon]").val(def.pk)
           @chosen = def.pk
-          console.log @$("input[name=icon]")
         icon_holder.append(icon)
       icon_holder.append("<div style='clear: both;'></div>")
     jscolor.bind()
@@ -271,7 +268,7 @@ class intertwinkles.IconChooser extends Backbone.View
 # User menu
 #
 
-user_menu_template = _.template("
+user_menu_template = _.template("""
   <a class='user-menu dropdown-toggle' href='#' data-toggle='dropdown' role='button'>
     <% if (user.icon && user.icon.tiny) { %>
       <img src='<%= user.icon.tiny %>' alt='<%= user.icon.color %> <%= user.icon.name %>' />
@@ -288,7 +285,7 @@ user_menu_template = _.template("
     <li class='divider'></li>
     <li><a tabindex='-1' class='sign-out' href='#'>Sign out</a></li>
   </ul>
-")
+""")
 class intertwinkles.UserMenu extends Backbone.View
   tagName: 'li'
   template: user_menu_template
@@ -320,15 +317,15 @@ class intertwinkles.UserMenu extends Backbone.View
 # Room users menu
 #
 
-room_users_menu_template = _.template("
+room_users_menu_template = _.template("""
   <a class='room-menu dropdown-toggle' href='#' data-toggle='dropdown'
      title='People in this room'>
     <i class='icon-user'></i><span class='count'></span>
     <b class='caret'></b>
   </a>
   <ul class='dropdown-menu' role='menu'></ul>
-")
-room_users_menu_item_template = _.template("
+""")
+room_users_menu_item_template = _.template("""
   <li><a>
     <% if (icon) { %>
       <img src='<%= icon.tiny %>' />
@@ -337,7 +334,7 @@ room_users_menu_item_template = _.template("
     <% } %>
     <%= name %>
   </a></li>
-")
+""")
 
 class intertwinkles.RoomUsersMenu extends Backbone.View
   tagName: "li"
@@ -389,7 +386,7 @@ intertwinkles.build_toolbar = (destination, options) ->
   $(".auth_frame").html(intertwinkles.auth_frame_template())
   toolbar.setAuthFrameVisibility()
 
-toolbar_template = _.template("
+toolbar_template = _.template("""
   <div class='navbar navbar-top nav'>
     <div class='navbar-inner'>
       <div class='container-fluid'>
@@ -412,7 +409,7 @@ toolbar_template = _.template("
       </div>
     </div>
   </div>
-")
+""")
 
 class intertwinkles.Toolbar extends Backbone.View
   template: toolbar_template
@@ -432,7 +429,7 @@ class intertwinkles.Toolbar extends Backbone.View
 # Footer
 #
 
-footer_template = _.template("
+footer_template = _.template("""
 <div class='bg'>
   <img src='#{INTERTWINKLES_BASE_URL}/static/img/coop-world.png' alt='Flavor image' />
 </div>
@@ -470,7 +467,7 @@ footer_template = _.template("
     </div>
   </div>
 </div>
-")
+""")
 
 intertwinkles.build_footer = (destination) ->
   $(destination).html(footer_template())
@@ -480,13 +477,13 @@ intertwinkles.build_footer = (destination) ->
 # User choice widget
 #
 
-user_choice_template = _.template("
+user_choice_template = _.template("""
   <input type='text' name='name' id='id_user' data-provide='typeahead' autocomplete='off' value='<%= name %>' />
   <span class='icon-holder' style='width: 32px; display: inline-block;'>
     <% if (icon) { %><img src='<%= icon %>' /><% } %>
   </span>
   <input type='hidden' name='user_id' id='id_user_id' value='<%= user_id %>' />
-")
+""")
 
 class intertwinkles.UserChoice extends Backbone.View
   tagName: "span"
@@ -562,25 +559,25 @@ class intertwinkles.UserChoice extends Backbone.View
 # Group choice widget
 #
 
-group_choice_template = _.template("
+group_choice_template = _.template("""
   <% if (intertwinkles.is_authenticated()) { %>
     <% if (intertwinkles.groups.length > 0) { %>
       <select id='id_group'>
         <option value=''>----</option>
         <% for (var i = 0; i < intertwinkles.groups.length; i++) { %>
           <% group = intertwinkles.groups[i]; %>
-          <option val='<%= group.id %>'><%= group.name %></option>
+          <option value='<%= group.id %>'><%= group.name %></option>
         <% } %>
       </select>
     <% } else { %>
       You don't have any groups yet.
     <% } %>
-    <span class='help-inline'>Optional</span><br />
+    <br />
     (or <a href='<%= INTERTWINKLES_BASE_URL %>/groups/edit'>create a new group</a>)
   <% } else { %>
     Sign in to add a group.
   <% } %>
-")
+""")
 
 class intertwinkles.GroupChoice extends Backbone.View
   tagName: "span"
@@ -589,6 +586,309 @@ class intertwinkles.GroupChoice extends Backbone.View
   render: =>
     @$el.html(@template())
     this
+
+#
+# Sharing control widget
+#
+
+sharing_control_template = _.template("""
+  <% if (intertwinkles.is_authenticated()) { %>
+    <div>
+      <a href='#' class='show-all-options'>Change sharing options</a>
+    </div>
+    <div class='hide all-options'>
+      <div class='group-options'>
+        Group:
+        <div class='group-choice'></div>
+      </div>
+      <div class='public-options'>
+        <div class='public-editing'>
+            In addition to group members, share with:<br />
+            Public: <select name='public_edit_or_view'>
+                      <option value=''>No</option>
+                      <option value='edit'>can edit</option>
+                      <option value='view'>can view</option>
+                    </select>
+          </label>
+          <span class='public-until'>
+            until <select name='public_until'>
+                    <option value='-1'>Forever</option>
+                    <option value='<%= 1000 * 60 * 60 %>'>One hour</option>
+                    <option value='<%= 1000 * 60 * 60 * 24 %>'>One day</option>
+                    <option value='<%= 1000 * 60 * 60 * 24 * 7 %>'>One week</option>
+                  </select>
+          </span>
+          <div>
+            <% var has_more_sharing = sharing.extra_editors != null || sharing.extra_viewers != null; %>
+            <% if (!has_more_sharing) { %>
+              <a href='#' class='more-sharing-options'>More sharing options</a>
+            <% } %>
+            <div class='extra<%= has_more_sharing ? '' : ' hide' %>'>
+              Extra editors (list email addresses):<br />
+              <textarea name='extra_editors'><%= (sharing.extra_editors || []).join(', ') %></textarea>
+              <br />
+              Extra viewers (list email addresses):<br />
+              <textarea name='extra_viewers'><%= (sharing.extra_viewers || []).join(', ') %></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class='advertise'>
+        <label>
+          List the URL publicly?
+          <input type='checkbox' name='advertise' value='on' <%= sharing.advertise ? 'checked=\"checked\"' : '' %> />
+        </label>
+      </div>
+    </div>
+    <div class='summary'>
+      <h4>Sharing summary:</h4>
+      <div class='perms'>
+      </div>
+      <div class='additional'>
+        The URL will <span class='public-url'></span> be listed publicly.<br />
+      </div>
+    </div>
+  <% } else { %>
+    <span class='help-inline'>
+      Anyone with the URL can edit or view.<br />
+      Sign in to change this.
+    </span>
+  <% } %>
+""")
+
+class intertwinkles.SharingFormControl extends Backbone.View
+  #
+  # A control for editing the sharing settings within a form.
+  #
+  template: sharing_control_template
+  initialize: (options={}) ->
+    @sharing = options.sharing or {}
+    
+    # Normalize sharing
+    now = new Date()
+    if @sharing.public_edit_until?
+      # Remove stale public edit until
+      @sharing.public_edit_until = new Date(@sharing.public_edit_until)
+      if @sharing.public_edit_until < now
+        delete @sharing.public_edit_until
+    if @sharing.public_view_until?
+      # Remove stale public view until
+      @sharing.public_view_until = new Date(@sharing.public_view_until)
+      if @sharing.public_view_until < now
+        delete @sharing.public_view_until
+    if @sharing.extra_editors?.length == 0
+      # Remove empty extra editors.
+      delete @sharing.extra_editors
+    if @sharing.extra_viewers?.length == 0
+      # Remove empty extra viewers.
+      delete @sharing.extra_viewers
+    if not (@sharing.public_edit_until? or @sharing.public_view_until?)
+      # Can't advertise unless it's public.
+      @sharing.advertise = false
+
+    intertwinkles.user.on "change", @render
+
+  render: =>
+    @$el.addClass("sharing-controls")
+    @$el.html(@template({sharing: @sharing}))
+    @render_summary()
+    return unless intertwinkles.is_authenticated()
+
+    group_choice = new intertwinkles.GroupChoice()
+    @$(".group-choice").html(group_choice.el)
+    group_choice.render()
+    @$("#id_group").val(@sharing.group_id) if @sharing.group_id?
+
+    if @sharing.public_edit_until?
+      @$("select[name=public_edit_or_view]").val("edit")
+    else if @sharing.public_view_until?
+      @$("select[name=public_edit_or_view]").val("view")
+    public_until = @sharing.public_edit_until or @sharing.public_view_until
+    if public_until
+      diff = public_until - new Date().getTime()
+      if diff > 1000 * 60 * 60 * 24 * 365
+        @$("select[name=public_until]").val("-1")
+      else if diff > 1000 * 60 * 60 * 24
+        @$("select[name=public_until]").val(1000 * 60 * 60 * 24 * 7) # one week
+      else if diff > 1000 * 60 * 60
+        @$("select[name=public_until]").val(1000 * 60 * 60 * 24) # one day
+      else
+        @$("select[name=public_until]").val(1000 * 60 * 60) # one hour
+
+    @$(".show-all-options").on "click", (event) =>
+      event.preventDefault()
+      $(event.currentTarget).hide()
+      @$(".all-options").show()
+
+    @$(".more-sharing-options").on "click", (event) =>
+      event.preventDefault()
+      @$(".extra").show()
+
+    setSharingVisibility = => @$(".public-options").toggle(@sharing.group_id?)
+    setSharingVisibility()
+
+    @$("#id_group").on "change", =>
+      @sharing.group_id = @$("#id_group").val()
+      if @sharing.group_id
+        @sharing.group_id = parseInt(@sharing.group_id)
+      else
+        delete @sharing.group_id
+        delete @sharing.public_view_until
+        delete @sharing.public_edit_until
+        delete @sharing.extra_viewers
+        delete @sharing.extra_editors
+      setSharingVisibility()
+      @render_summary()
+
+    setUntil = =>
+      val = parseInt(@$("select[name=public_until]").val())
+      if val == -1
+        # 1000 years in the future should be good enough for 'forever'.
+        val = 1000 * 60 * 60 * 24 * 365 * 1000
+      future = new Date(new Date().getTime() + val)
+      switch @$("select[name=public_edit_or_view]").val()
+        when 'edit'
+          @sharing.public_edit_until = future
+          @sharing.public_view_until = null
+          @$(".advertise").show()
+        when 'view'
+          @sharing.public_edit_until = null
+          @sharing.public_view_until = future
+          @$(".advertise").show()
+        when ''
+          @sharing.public_edit_until = null
+          @sharing.public_view_until = null
+          @sharing.advertise = false
+          @$("input[name=advertise]").val(false)
+          @$(".advertise").hide()
+      @render_summary()
+
+    @$("select[name=public_until]").on "change", setUntil
+    @$("select[name=public_edit_or_view]").on "change", (event) =>
+      val = $(event.currentTarget).val()
+      @$(".public-until").toggle(val != '')
+      setUntil()
+    @$(".public-until").toggle(@sharing.public_edit_until? or @sharing.public_view_until?)
+
+    @$("input[name=advertise]").on "change", (event) =>
+      @sharing.advertise = @$("input[name=advertise]").is(":checked")
+      @render_summary()
+
+    @$("textarea[name=extra_editors], textarea[name=extra_viewers]").on "change", =>
+      @sharing.extra_editors = _.reject(
+        @$("textarea[name=extra_editors]").val().split(/[,\s]+/), (e) -> not e
+      )
+      @sharing.extra_viewers = _.reject(
+        @$("textarea[name=extra_viewers]").val().split(/[,\s]+/), (e) -> not e
+      )
+      if @sharing.extra_editors.length == 0
+        @sharing.extra_editors = null
+      if @sharing.extra_viewers.length == 0
+        @sharing.extra_viweers = null
+      @render_summary()
+
+
+  render_summary: =>
+    # Render a natural-language summary of the model's current sharing preferences.
+    sharing = @sharing
+    console.log(sharing)
+    @$(".summary .public-url").html(if sharing.advertise then "" else "not")
+    if not sharing? or not sharing.group_id?
+      @$(".summary .perms").html("Anyone with the URL can edit.")
+    else
+      perms = []
+      now = new Date()
+      is_public = false
+      if sharing.public_edit_until?
+        if sharing.public_edit_until.getTime() - now.getTime() > 1000 * 60 * 60 * 24 * 365 * 100
+          future = "forever"
+        else
+          future = "until #{@sharing.public_edit_until.toString("ddd MMM d, h:mmtt")}"
+        perms.push("Anyone with the URL can edit this #{future}.")
+        is_public = true
+      else if sharing.public_view_until?
+        if sharing.public_view_until.getTime() - now.getTime() > 1000 * 60 * 60 * 24 * 365 * 100
+          future = "forever"
+        else
+          future = "until #{@sharing.public_view_until.toString("ddd MMM d, h:mmtt")}"
+        perms.push("Anyone with the URL can view this #{future}.")
+        is_public = true
+      group = _.find intertwinkles.groups, (g) -> "" + g.id == "" + sharing.group_id
+      group_list = _.map(group.members, (m) ->
+        intertwinkles.users[m.user_id].email
+      )
+      perms.push("Members of <acronym title='#{group_list.join(", ")}'>#{group.name}</acronym> can view and edit#{if is_public then " beyond that date" else ""}.")
+      if sharing.extra_editors?.length > 0
+        other_editors = _.difference(sharing.extra_editors, group_list)
+      else
+        other_editors = []
+      if sharing.extra_viewers?.length > 0
+        other_viewers = _.difference(sharing.extra_viewers, group_list, other_editors)
+      else
+        other_viewers = []
+      if other_editors.length > 0
+        perms.push("<br />The following people can also edit: <i>#{other_editors.join(", ")}</i>.")
+      if other_viewers.length > 0
+        perms.push("<br />The following people can also view: <i>#{other_viewers.join(", ")}</i>.")
+      if not is_public
+        perms.push("All others, and people who aren't signed in, cannot view or edit.")
+      @$(".summary .perms").html(perms.join(" "))
+
+sharing_settings_button_template = _.template("""
+  <div class='sharing-settings-button'>
+    <a class='btn btn-success open-sharing'><i class='icon-globe'></i> Share</a>
+  </div>
+""")
+sharing_settings_modal_template = _.template("""
+  <div class='modal hide fade'>
+    <div class='modal-header'>
+      <button type='button' class='close' data-dismiss='modal' aria-hidden='true'>&times;</button>
+      <h3>Sharing</h3>
+    </div>
+    <form class='form-horizontal'>
+      <div class='modal-body'>
+        <div class='sharing-controls'></div>
+      </div>
+      <div class='modal-footer'>
+        <input type='submit' class='btn btn-primary' value='Save' />
+      </div>
+    </form>
+  </div>
+""")
+
+class intertwinkles.SharingSettingsButton extends Backbone.View
+  # A control that briefly summarizes the sharing preferences for a document,
+  # and invokes a form to edit them.
+  template: sharing_settings_button_template
+  modalTemplate: sharing_settings_modal_template
+  events:
+    'click .open-sharing': 'renderModal'
+
+  initialize: (options={}) ->
+    @model = options.model
+    @model.on "change", @render
+
+  render: =>
+    @$el.html(@template())
+
+  renderModal: (event) =>
+    event.preventDefault()
+    @modal = $(@modalTemplate())
+    $("body").append(@modal)
+    @modal.modal('show').on('hidden', => @modal.remove())
+    @sharing = new intertwinkles.SharingFormControl(sharing: @model.get("sharing"))
+    $(".sharing-controls", @modal).html(@sharing.el)
+    @sharing.render()
+    $("form", @modal).on "submit", @save
+
+  close: =>
+    @modal.modal('hide')
+
+  save: (event) =>
+    event.preventDefault()
+    $("input[type=submit]", @modal).addClass("loading")
+    @trigger "save", @sharing.sharing
+    return false
 
 #
 # Utilities

@@ -40,10 +40,6 @@ html(lang="en")
           h3 New Firestarter
           form#new_firestarter_form.form-horizontal
             div.control-group
-              label.control-label(for="id_group") Group
-              div.controls#group_controls
-              
-            div.control-group
               label.control-label(for="id_name") *Event name
               div.controls
                 input#id_name(type='text', name='name')
@@ -56,15 +52,10 @@ html(lang="en")
               div.controls
                 input#id_slug(type='text', placeholder='Unique name')
                 div.firestarter-url
-                div.help-inline
-                  | Anyone with the URL can add responses.
             div.control-group
-              div.controls
-                label.checkbox
-                  input#id_public(type='checkbox', checked='checked', name='public')
-                  | List on the firestarter homepage
-                div.help-inline
-                  | This makes it easier for participants to find, but less private.
+              label.control-label(for="id_group") Sharing
+              div.controls#sharing_controls
+              
             div.control-group
               div.controls
                 input.btn.btn-large.btn-danger#submit_new_firestarter(type="submit", value="Start")
@@ -81,7 +72,7 @@ html(lang="en")
 
     script(type="text/template", id="firestarterTemplate")
       div.container-fluid
-        div.row-fluid
+        div.row-fluid(style='position: relative;')
           div.span12(style='text-align: center;')
             div.first-loading
               em Sparking...
@@ -89,18 +80,25 @@ html(lang="en")
             div.byline
               span.firestarter-date
               span.firestarter-participants
-            h1.hover-edit
+            h1.hover-edit(style='display: inline-block')
               span.firestarter-name
+              <% if (!read_only) { %>
               a.edit-link.edit-name(href='#') Edit
+              <% } %>
+            div.sharing(style='position: absolute; right: 1em; top: 1em; text-align: left;')
         div.row-fluid
           div.span6.offset3
             div.well.hover-edit
               span.firestarter-prompt
+              <% if (!read_only) { %>
               a.edit-link.edit-prompt(href='#') Edit
+              <% } %>
         div.row-fluid
           div.span6.offset3
             div(style='text-align: center;')
+              <% if (!read_only) { %>
               a.btn.btn-danger.btn-large#add_response Add response
+              <% } %>
             div.modal.hide.fade.add-response-holder
         div.row-fluid
           div.span12.responses(style='text-align: center;')
@@ -147,12 +145,14 @@ html(lang="en")
       div.response
         <%- intertwinkles.markup(response) %>
       div.foot
+        <% if (!read_only) { %>
         a.delete(href='#', style='float: left;')
           i.icon.icon-trash
         a.edit(href='#', style='float: right;') Edit
+        <% } %>
         div.delete-confirmation.modal.fade.hide
           div.modal-header
-            button.close.modal(type='button', data-dismiss='modal', aria-hidden='true') &times;
+            button.close.modal(type='button', data-dismiss='modal', aria-hidden='true', value='&times;')
             h1 Really delete?
           div.modal-body
             p Delete this response by <%- intertwinkles.inline_user(user_id, name) %>?

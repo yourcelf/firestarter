@@ -62,8 +62,13 @@ start = (options) ->
         res.send(500)
       else if not doc?
         res.send(404)
+      else if not intertwinkles.can_view(req.session, doc)
+        res.send(403) #FIXME: Redirect to login instead.
       else
-        index_res(req, res, {firestarter: doc.toJSON()})
+        index_res(req, res, {
+          firestarter: doc.toJSON()
+          editable: intertwinkles.can_edit(req.session, doc)
+        })
 
   # Get a valid slug for a firestarter that hasn't yet been used.
   iorooms.onChannel 'get_unused_slug', (socket, data) ->
@@ -87,9 +92,11 @@ start = (options) ->
   # Create a new firestarter.
   iorooms.onChannel "create_firestarter", (socket, data) ->
     unless data.callback?
-      socket.emit("error", {error: "Must specifiy callback."})
+      return socket.emit("error", {error: "Must specifiy callback."})
     unless data.model?
-      socket.emit(data.callback, {error: "Missing required model attribute."})
+      return socket.emit("error", {error: "Missing required model attribute."})
+    unless intertwinkles.can_edit(socket.session, data.model)
+      return socket.emit("error", {error: "Permission denied"})
 
     model = new models.Firestarter(data.model)
     model.save (err, model) ->
@@ -112,9 +119,11 @@ start = (options) ->
 
   # Edit a firestarter
   iorooms.onChannel 'edit_firestarter', (socket, data) ->
+    unless intertwinkles.can_edit(socket.session, data.model)
+      return socket.emit("error", {error: "Permission denied"})
     updates = {}
     changes = false
-    for key in ["name", "prompt", "public"]
+    for key in ["name", "prompt", "public", "sharing"]
       if data.model?[key]
         updates[key] = data.model[key]
         changes = true
@@ -140,8 +149,13 @@ start = (options) ->
         socket.emit("error", {error: err})
       else if not model?
         socket.emit("firestarter", {error: 404})
+      else if not intertwinkles.can_view(socket.session, model)
+        socket.emit("error", {error: "Permission denied"})
       else
-        socket.emit("firestarter", {model: model.toJSON()})
+        socket.emit("firestarter", {
+          model: model.toJSON()
+          editable: intertwinkles.can_edit(socket.session, model)
+        })
 
   # Save a response to a firestarter.
   iorooms.onChannel "save_response", (socket, data) ->
@@ -156,8 +170,11 @@ start = (options) ->
     if not data.model?.firestarter_id
       respond("Missing firestarter id")
 
+
     models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
       if err? then return respond(err)
+      unless intertwinkles.can_edit(socket.session, firestarter)
+        return respond("Permission denied")
 
       updateFirestarter = (err, responseDoc) ->
         if err? then return respond(err)
@@ -197,6 +214,9 @@ start = (options) ->
 
     models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
       if err? then return respond(err)
+      unless intertwinkles.can_edit(socket.session, firestarter)
+        return respond("Permission denied")
+
       if not firestarter? then return respond("Error: firestarter not found.")
       unless data.model._id? then return respond("No response._id specified.")
 

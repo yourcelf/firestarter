@@ -160,6 +160,7 @@ attach = (config, app, iorooms) ->
         res.on 'end', ->
           if res.statusCode == 200
             profile = JSON.parse(answer)
+            socket.session.groups?.users[profile.id] = profile
             respond(null, model: profile)
           else
             respond("InterTwinkles status #{res.statusCode}")
@@ -205,6 +206,57 @@ attach = (config, app, iorooms) ->
 
   if app?
     null
-    # TODO: Add routes to "/verify" and "/logout" for AJAX
+    # TODO: Add routes to "/verify", "/logout", "/edit_profile" etc for AJAX
 
-module.exports = { attach, verify }
+#
+# Permissions. Expects 'session' to have auth and groups params as populated by
+# 'verify' above, and model to have the following schema:
+#   sharing: {
+#     group_id: String          -- a group ID from InterTwinkles
+#     public_view_until: Date   -- Date until expiry of public viewing. Set to 
+#                                  far future for perpetual public viewing.
+#     public_edit_until: Date   -- Date until expiry of public editing. Set to 
+#                                  far future for perpetual public viewing.
+#     extra_viewers: [String]   -- A list of email addresses of people who are
+#                                  also allowed to view.
+#     extra_editors: [String]   -- A list of email addresses of people who are
+#                                  also allowed to edit.
+#     advertise: Boolean        -- List/index this document publicly?
+#   }
+#
+#  Assumptions: Edit permissions imply view permissions.  Group association
+#  implies all permissions granted to members of that group. Absence of group
+#  association implies the public can view and edit (e.g. etherpad style;
+#  relies on secret URL for security).
+#
+can_view = (session, model) ->
+  # Editing implies viewing.
+  return true if can_edit(session, model)
+  # Is this public for viewing but not editing?
+  return true if model.sharing.public_view_until > new Date()
+  # Are we specifically listed as an extra viewer?
+  return true if (
+    model.sharing.extra_viewers? and
+    session.auth?.email? and
+    model.sharing.extra_viewers.indexOf(session.auth.email) != -1
+  )
+  return false
+
+can_edit = (session, model) ->
+  # No group? Everyone can edit.
+  return true if not model.sharing.group_id?
+  # If it is associated with a group, it might be marked public.
+  return true if model.sharing.public_edit_until > new Date()
+  # Otherwise, we have to be signed in.
+  return false if not session.auth?.email?
+  # Or we could be in a group that owns this.
+  return true if _.find(session.groups.groups, (g) -> "" + g.id == "" + model.sharing.group_id)
+  # Or marked as specifically allowed to edit
+  return true if (
+    model.sharing.extra_editors? and
+    session.auth?.email? and
+    model.sharing.extra_editors.indexOf(session.auth.email) != -1
+  )
+  return false
+
+module.exports = { attach, verify, can_view, can_edit }
