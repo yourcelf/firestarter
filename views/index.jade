@@ -4,10 +4,10 @@ html(lang="en")
     meta(http-equiv="Content-Type", content="text/html; charset=utf-8")
     meta(name='viewport', content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
     meta(name="apple-mobile-web-app-capable", content="yes")
-    link(rel="shortcut icon", href="/img/favicon.gif")
+    link(rel="shortcut icon", href="/static/img/favicon.gif")
     title= title
-    !=css('bootstrap')
-    !=css('style')
+    != css('bootstrap')
+    != css('style')
 
   body
     div#page
@@ -25,7 +25,7 @@ html(lang="en")
       div#flash
       div#app
         em Sparking...
-        img(src="/img/sparking.gif")
+        img(src="/static/img/sparking.gif")
       div#push
     footer
 
@@ -77,7 +77,7 @@ html(lang="en")
           div.span12(style='text-align: center;')
             div.first-loading
               em Sparking...
-              img(src="/img/sparking.gif")
+              img(src="/static/img/sparking.gif")
             div.byline
               span.firestarter-date
               span.firestarter-participants

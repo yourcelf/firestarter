@@ -3,8 +3,8 @@ socketio      = require 'socket.io'
 mongoose      = require 'mongoose'
 RoomManager   = require('iorooms').RoomManager
 RedisStore    = require('connect-redis')(express)
+intertwinkles = require 'node-intertwinkles'
 models        = require './schema'
-intertwinkles = require './intertwinkles'
 config        = require './config'
 _             = require 'underscore'
 
@@ -20,7 +20,7 @@ start = (options) ->
   # Config
   #
   app.configure ->
-    app.use require('connect-assets')()
+    app.use require('connect-assets')({servePath: ""})
     app.use express.bodyParser()
     app.use express.cookieParser()
     app.use express.session
@@ -30,12 +30,15 @@ start = (options) ->
     app.set 'view options', {layout: false}
 
   app.configure 'development', ->
-    app.use express.static __dirname + '/../assets'
+    app.use '/static', express.static(__dirname + '/../assets')
+    app.use '/static', express.static(__dirname + '/../node_modules/node-intertwinkles/assets')
     app.use express.errorHandler {dumpExceptions: true, showStack: true }
 
   app.configure 'production', ->
     # Cache long time in production.
-    app.use express.static __dirname + '/../assets', { maxAge: 1000*60*60*24 }
+    app.use '/static', express.static(__dirname + '/../assets', { maxAge: 1000*60*60*24 })
+    app.use '/static', express.static(__dirname + '/../node_modules/node-intertwinkles/assets', { maxAge: 1000*60*60*24 })
+
   app.set 'view engine', 'jade'
 
   io = socketio.listen(app, {"log level": 0})

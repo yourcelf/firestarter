@@ -1,23 +1,4 @@
-#= require vendor/jquery
-#= require vendor/underscore
-#= require vendor/underscore-autoescape
-#= require vendor/backbone
-#= require vendor/jquery-ui-1.9.1.custom
-#= require ../bootstrap/js/bootstrap-transition.js
-#= require ../bootstrap/js/bootstrap-modal.js
-#= require ../bootstrap/js/bootstrap-dropdown.js
-#= require ../bootstrap/js/bootstrap-scrollspy.js
-#= require ../bootstrap/js/bootstrap-tab.js
-#= require ../bootstrap/js/bootstrap-tooltip.js
-#= require ../bootstrap/js/bootstrap-popover.js
-#= require ../bootstrap/js/bootstrap-alert.js
-#= require ../bootstrap/js/bootstrap-button.js
-#= require ../bootstrap/js/bootstrap-collapse.js
-#= require ../bootstrap/js/bootstrap-carousel.js
-#= require ../bootstrap/js/bootstrap-typeahead.js
-#= require ../bootstrap/js/bootstrap-affix.js
-#= require ./flash
-#= require ./intertwinkles
+#= require ../intertwinkles/js/intertwinkles/index
 
 fire = {}
 
