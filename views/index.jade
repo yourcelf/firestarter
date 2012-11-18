@@ -16,12 +16,12 @@ html(lang="en")
         :markdown
           This site depends on javascript and cookies, thoroughly and completely.
           Please enable and allow scripts from this site in order to use it.  If your
-          device does not support javascript, our apologies -- feel free to contact us
-          at cfd@media.mit.edu and we will consider adding support for your device.
-        
+          device does not support javascript, our apologies.
+
           For the security conscious, the full javascript source code for this site
           is freely available at https://github.com/yourcelf/firestarter if you'd like
-          to examine it.
+          to examine it. There you can also find instructions for installing and running
+          this site on your own servers.
       div#flash
       div#app
         em Sparking...
@@ -33,6 +33,17 @@ html(lang="en")
     != "var INITIAL_DATA = " + JSON.stringify(initial_data) + ";"
     != "var INTERTWINKLES_BASE_URL = '" + intertwinkles_base_url + "';"
     </script>
+
+    script(type="text/template", id="splashTemplate")
+      div.container-fluid
+        div.row-fluid
+          div.span12(style='text-align: center;')
+            h1 Firestarter
+            p Go around, ice breaker, introductions, etc.
+            p
+              a.btn.btn-large.btn-primary.new-firestarter(href='#')
+                | New Firestarter
+
 
     script(type="text/template", id="addFirestarterTemplate")
       div.row-fluid
@@ -59,16 +70,6 @@ html(lang="en")
             div.control-group
               div.controls
                 input.btn.btn-large.btn-danger#submit_new_firestarter(type="submit", value="Start")
-
-    script(type="text/template", id="splashTemplate")
-      div.container-fluid
-        div.row-fluid
-          div.span12(style='text-align: center;')
-            h1 Firestarter
-            p Go around, ice breaker, introductions, etc.
-            p
-              a.btn.btn-large.btn-primary.new-firestarter(href='#')
-                | New Firestarter
 
     script(type="text/template", id="firestarterTemplate")
       div.container-fluid

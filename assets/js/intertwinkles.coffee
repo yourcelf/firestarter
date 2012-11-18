@@ -75,7 +75,10 @@ onlogout = ->
   intertwinkles.user.clear()
   socket_ready = setInterval ->
     clearInterval(socket_ready)
-    intertwinkles.socket.once "logout", -> if reload then window.location.pathname = "/"
+    intertwinkles.socket.once "logout", ->
+      if reload
+        flash "info", "Signed out."
+        #window.location.pathname = "/"
     intertwinkles.socket.emit "logout", {callback: "logout"}
   , 50
 
@@ -598,10 +601,11 @@ sharing_control_template = _.template("""
     </div>
     <div class='hide all-options'>
       <div class='group-options'>
-        Group:
+        Belongs to group:
         <div class='group-choice'></div>
       </div>
       <div class='public-options'>
+        <hr>
         <div class='public-editing'>
             In addition to group members, share with:<br />
             Public: <select name='public_edit_or_view'>
@@ -618,11 +622,15 @@ sharing_control_template = _.template("""
                     <option value='<%= 1000 * 60 * 60 * 24 * 7 %>'>One week</option>
                   </select>
           </span>
+        <div class='advertise'>
+          <label>
+            List the link publicly?
+            <input type='checkbox' name='advertise' value='on' <%= sharing.advertise ? 'checked=\"checked\"' : '' %> />
+          </label>
+        </div>
+        <hr>
           <div>
             <% var has_more_sharing = sharing.extra_editors != null || sharing.extra_viewers != null; %>
-            <% if (!has_more_sharing) { %>
-              <a href='#' class='more-sharing-options'>More sharing options</a>
-            <% } %>
             <div class='extra<%= has_more_sharing ? '' : ' hide' %>'>
               Extra editors (list email addresses):<br />
               <textarea name='extra_editors'><%= (sharing.extra_editors || []).join(', ') %></textarea>
@@ -630,23 +638,18 @@ sharing_control_template = _.template("""
               Extra viewers (list email addresses):<br />
               <textarea name='extra_viewers'><%= (sharing.extra_viewers || []).join(', ') %></textarea>
             </div>
+            <% if (!has_more_sharing) { %>
+              <a href='#' class='more-sharing-options'>Add specific people</a>
+            <% } %>
           </div>
         </div>
       </div>
-      <div class='advertise'>
-        <label>
-          List the URL publicly?
-          <input type='checkbox' name='advertise' value='on' <%= sharing.advertise ? 'checked=\"checked\"' : '' %> />
-        </label>
-      </div>
     </div>
+        <hr>
     <div class='summary'>
       <h4>Sharing summary:</h4>
-      <div class='perms'>
-      </div>
-      <div class='additional'>
-        The URL will <span class='public-url'></span> be listed publicly.<br />
-      </div>
+      <b><span class='summary-title'></span></b>
+      <div class='summary-content'></div>
     </div>
   <% } else { %>
     <span class='help-inline'>
@@ -662,30 +665,17 @@ class intertwinkles.SharingFormControl extends Backbone.View
   #
   template: sharing_control_template
   initialize: (options={}) ->
-    @sharing = options.sharing or {}
-    
-    # Normalize sharing
-    now = new Date()
-    if @sharing.public_edit_until?
-      # Remove stale public edit until
-      @sharing.public_edit_until = new Date(@sharing.public_edit_until)
-      if @sharing.public_edit_until < now
-        delete @sharing.public_edit_until
-    if @sharing.public_view_until?
-      # Remove stale public view until
-      @sharing.public_view_until = new Date(@sharing.public_view_until)
-      if @sharing.public_view_until < now
-        delete @sharing.public_view_until
-    if @sharing.extra_editors?.length == 0
-      # Remove empty extra editors.
-      delete @sharing.extra_editors
-    if @sharing.extra_viewers?.length == 0
-      # Remove empty extra viewers.
-      delete @sharing.extra_viewers
-    if not (@sharing.public_edit_until? or @sharing.public_view_until?)
-      # Can't advertise unless it's public.
-      @sharing.advertise = false
-
+    # Create a deep copy to operate on.
+    sharing = options.sharing or {}
+    @sharing = {
+      group_id: sharing.group_id
+      public_edit_until: if sharing.public_edit_until then new Date(sharing.public_edit_until) else undefined
+      public_view_until: if sharing.public_view_until then new Date(sharing.public_view_until) else undefined
+      extra_editors: if sharing.extra_editors then (a for a in sharing.extra_editors) else undefined
+      extra_viewers: if sharing.extra_viewers then (a for a in sharing.extra_viewers) else undefined
+      advertise: sharing.advertise
+    }
+    @sharing = intertwinkles.normalize_sharing(@sharing)
     intertwinkles.user.on "change", @render
 
   render: =>
@@ -722,7 +712,15 @@ class intertwinkles.SharingFormControl extends Backbone.View
 
     @$(".more-sharing-options").on "click", (event) =>
       event.preventDefault()
-      @$(".extra").show()
+      extra = @$(".extra")
+      if extra.is(":visible")
+        extra.hide()
+        $("textarea", extra).val("")
+        $(event.currentTarget).html("Add specific people")
+        @render_summary()
+      else
+        $(event.currentTarget).html("Remove these")
+        extra.show()
 
     setSharingVisibility = => @$(".public-options").toggle(@sharing.group_id?)
     setSharingVisibility()
@@ -766,9 +764,12 @@ class intertwinkles.SharingFormControl extends Backbone.View
     @$("select[name=public_until]").on "change", setUntil
     @$("select[name=public_edit_or_view]").on "change", (event) =>
       val = $(event.currentTarget).val()
-      @$(".public-until").toggle(val != '')
+      @$(".public-until, .advertise").toggle(val != '')
+      if val == ''
+        @$("input[name=advertise]").attr("checked", false)
+
       setUntil()
-    @$(".public-until").toggle(@sharing.public_edit_until? or @sharing.public_view_until?)
+    @$(".public-until, .advertise").toggle(@sharing.public_edit_until? or @sharing.public_view_until?)
 
     @$("input[name=advertise]").on "change", (event) =>
       @sharing.advertise = @$("input[name=advertise]").is(":checked")
@@ -787,56 +788,115 @@ class intertwinkles.SharingFormControl extends Backbone.View
         @sharing.extra_viweers = null
       @render_summary()
 
-
   render_summary: =>
     # Render a natural-language summary of the model's current sharing preferences.
-    sharing = @sharing
-    console.log(sharing)
-    @$(".summary .public-url").html(if sharing.advertise then "" else "not")
-    if not sharing? or not sharing.group_id?
-      @$(".summary .perms").html("Anyone with the URL can edit.")
+    summary = intertwinkles.sharing_summary(@sharing)
+    @$(".summary .summary-content").html(summary.content)
+    @$(".summary .summary-title").html(summary.title)
+
+intertwinkles.sharing_summary = (sharing) ->
+  perms = []
+  short_title = ""
+  if not sharing?
+    short_title = "Public with secret URL"
+    perms.push("Anyone with the link can edit.")
+  else if not sharing.group_id?
+    if sharing.advertise
+      short_title = "Public wiki"
+      icon_class = "icon-globe"
+      perms.push("Anyone can find and edit.")
     else
-      perms = []
-      now = new Date()
-      is_public = false
-      if sharing.public_edit_until?
-        if sharing.public_edit_until.getTime() - now.getTime() > 1000 * 60 * 60 * 24 * 365 * 100
-          future = "forever"
-        else
-          future = "until #{@sharing.public_edit_until.toString("ddd MMM d, h:mmtt")}"
-        perms.push("Anyone with the URL can edit this #{future}.")
-        is_public = true
-      else if sharing.public_view_until?
-        if sharing.public_view_until.getTime() - now.getTime() > 1000 * 60 * 60 * 24 * 365 * 100
-          future = "forever"
-        else
-          future = "until #{@sharing.public_view_until.toString("ddd MMM d, h:mmtt")}"
-        perms.push("Anyone with the URL can view this #{future}.")
-        is_public = true
-      group = _.find intertwinkles.groups, (g) -> "" + g.id == "" + sharing.group_id
-      group_list = _.map(group.members, (m) ->
-        intertwinkles.users[m.user_id].email
-      )
-      perms.push("Members of <acronym title='#{group_list.join(", ")}'>#{group.name}</acronym> can view and edit#{if is_public then " beyond that date" else ""}.")
-      if sharing.extra_editors?.length > 0
-        other_editors = _.difference(sharing.extra_editors, group_list)
+      short_title = "Public with secret URL"
+      icon_class = "icon-share"
+      perms.push("Anyone with the link can edit.")
+  else
+    now = new Date()
+    is_public = false
+    group = _.find intertwinkles.groups, (g) -> "" + g.id == "" + sharing.group_id
+    if sharing.public_edit_until?
+      if sharing.public_edit_until.getTime() - now.getTime() > 1000 * 60 * 60 * 24 * 365 * 100
+        future = "forever"
       else
-        other_editors = []
-      if sharing.extra_viewers?.length > 0
-        other_viewers = _.difference(sharing.extra_viewers, group_list, other_editors)
+        future = "until #{sharing.public_edit_until.toString("ddd MMM d, h:mmtt")}"
+        short_title = "Public " + future
+      perms.push("Anyone with the URL can edit this #{future}.")
+      is_public = true
+      if sharing.advertise
+        short_title = "Public wiki"
+        icon_class = "icon-globe"
       else
-        other_viewers = []
-      if other_editors.length > 0
-        perms.push("<br />The following people can also edit: <i>#{other_editors.join(", ")}</i>.")
-      if other_viewers.length > 0
-        perms.push("<br />The following people can also view: <i>#{other_viewers.join(", ")}</i>.")
-      if not is_public
-        perms.push("All others, and people who aren't signed in, cannot view or edit.")
-      @$(".summary .perms").html(perms.join(" "))
+        short_title = "Public with secret URL"
+        icon_class = "icon-share"
+    else if sharing.public_view_until?
+      if sharing.public_view_until.getTime() - now.getTime() > 1000 * 60 * 60 * 24 * 365 * 100
+        future = "forever"
+      else
+        future = "until #{sharing.public_view_until.toString("ddd MMM d, h:mmtt")}"
+      perms.push("Anyone with the URL can view this #{future}.")
+      is_public = true
+      if sharing.advertise
+        short_title = "Public on the web"
+        icon_class = "icon-globe"
+      else
+        short_title = "Public with secret URL"
+        icon_class = "icon-share"
+    else
+      short_title = "Private to #{group.name}"
+      icon_class = "icon-lock"
+
+    group_list = _.map(group.members, (m) ->
+      intertwinkles.users[m.user_id].email
+    )
+    perms.push("Members of <acronym title='#{group_list.join(", ")}'>#{group.name}</acronym> can view and edit#{if is_public then " beyond that date" else ""}.")
+    if sharing.extra_editors?.length > 0
+      other_editors = _.difference(sharing.extra_editors, group_list)
+    else
+      other_editors = []
+    if sharing.extra_viewers?.length > 0
+      other_viewers = _.difference(sharing.extra_viewers, group_list, other_editors)
+    else
+      other_viewers = []
+    if other_editors.length > 0
+      perms.push("<br />The following people can also edit: <i>#{other_editors.join(", ")}</i>.")
+    if other_viewers.length > 0
+      perms.push("<br />The following people can also view: <i>#{other_viewers.join(", ")}</i>.")
+    if not is_public
+      perms.push("All others, and people who aren't signed in, cannot view or edit.")
+  perms.push("<br />The link will #{if sharing.advertise then "" else "not"} be listed publicly.")
+  return {
+    title: short_title
+    content: perms.join(" ")
+    icon_class: icon_class
+  }
+
+intertwinkles.normalize_sharing = (sharing) ->
+  # Normalize sharing
+  now = new Date()
+  if sharing.public_edit_until?
+    # Remove stale public edit until
+    sharing.public_edit_until = new Date(sharing.public_edit_until)
+    if sharing.public_edit_until < now
+      delete sharing.public_edit_until
+  if sharing.public_view_until?
+    # Remove stale public view until
+    sharing.public_view_until = new Date(sharing.public_view_until)
+    if sharing.public_view_until < now
+      delete sharing.public_view_until
+  if sharing.extra_editors?.length == 0
+    # Remove empty extra editors.
+    delete sharing.extra_editors
+  if sharing.extra_viewers?.length == 0
+    # Remove empty extra viewers.
+    delete sharing.extra_viewers
+  if sharing.group_id? and not (sharing.public_edit_until? or sharing.public_view_until?)
+    # Can't advertise unless it's public.
+    sharing.advertise = false
+  return sharing
+
 
 sharing_settings_button_template = _.template("""
   <div class='sharing-settings-button'>
-    <a class='btn btn-success open-sharing'><i class='icon-globe'></i> Share</a>
+    <a class='btn btn-success open-sharing'><i class='<%= icon_class %>'></i> Sharing</a>
   </div>
 """)
 sharing_settings_modal_template = _.template("""
@@ -850,6 +910,9 @@ sharing_settings_modal_template = _.template("""
         <div class='sharing-controls'></div>
       </div>
       <div class='modal-footer'>
+        <div class='url-to-share pull-left'>
+          Share this: <input readonly type='text' class='url' value='<%= window.location.href %>' />
+        </div>
         <input type='submit' class='btn btn-primary' value='Save' />
       </div>
     </form>
@@ -866,13 +929,34 @@ class intertwinkles.SharingSettingsButton extends Backbone.View
 
   initialize: (options={}) ->
     @model = options.model
-    @model.on "change", @render
+    @model.on "change:sharing", @render
+    intertwinkles.user.on "change", @render
 
   render: =>
-    @$el.html(@template())
+    summary = intertwinkles.sharing_summary(intertwinkles.normalize_sharing(
+      @model.get("sharing")
+    ))
+    @$el.html(@template(icon_class: summary.icon_class))
+    #TODO: Change icon for different sharing settings.
+    popover_content = summary.content
+    if intertwinkles.is_authenticated()
+      popover_content += "<br /><i>Click to change settings.</i>"
+    else
+      @$(".open-sharing").addClass("disabled")
+      popover_content += "<br /><i>Sign in to change sharing settings.</i>"
+        
+    @$(".open-sharing").popover({
+        placement: "left"
+        html: true
+        title: summary.title
+        content: popover_content
+        trigger: "hover"
+      })
 
   renderModal: (event) =>
     event.preventDefault()
+    unless intertwinkles.is_authenticated()
+      return
     @modal = $(@modalTemplate())
     $("body").append(@modal)
     @modal.modal('show').on('hidden', => @modal.remove())
