@@ -49,29 +49,33 @@ start = (options) ->
   #
 
   index_res = (req, res, initial_data) ->
-    res.render 'index', {
-      title: "Firestarter"
-      initial_data: _.extend({
-        email: req.session.auth?.email or null
-        groups: req.session.groups or null
-      }, initial_data)
-      intertwinkles_base_url: config.intertwinkles_base_url
-    }
+    intertwinkles.list_accessible_documents models.Firestarter, req.session, (err, docs) ->
+      return res.send(500) if err?
+      res.render 'index', {
+        title: "Firestarter"
+        initial_data: _.extend({
+          email: req.session.auth?.email or null
+          groups: req.session.groups or null
+          listed_firestarters: docs
+        }, initial_data)
+        conf: options.intertwinkles
+      }
+
   app.get '/', (req, res) -> index_res(req, res, {})
   app.get '/new', (req, res) -> index_res(req, res, {})
   app.get '/f/:slug', (req, res) ->
     models.Firestarter.with_responses {slug: req.params.slug}, (err, doc) ->
-      if err?
-        res.send(500)
-      else if not doc?
-        res.send(404)
-      else if not intertwinkles.can_view(req.session, doc)
-        res.send(403) #FIXME: Redirect to login instead.
-      else
-        index_res(req, res, {
-          firestarter: doc.toJSON()
-          editable: intertwinkles.can_edit(req.session, doc)
-        })
+      return res.send(500) if err?
+      return res.send(404) if not doc?
+      #FIXME: Redirect to login instead.
+      return res.send(403) if not intertwinkles.can_view(req.session, doc)
+
+      editable =  intertwinkles.can_edit(req.session, doc)
+      doc.sharing = intertwinkles.clean_sharing(req.session, doc)
+      index_res(req, res, {
+        firestarter: doc.toJSON()
+        editable: editable
+      })
 
   # Get a valid slug for a firestarter that hasn't yet been used.
   iorooms.onChannel 'get_unused_slug', (socket, data) ->
@@ -122,8 +126,6 @@ start = (options) ->
 
   # Edit a firestarter
   iorooms.onChannel 'edit_firestarter', (socket, data) ->
-    unless intertwinkles.can_edit(socket.session, data.model)
-      return socket.emit("error", {error: "Permission denied"})
     updates = {}
     changes = false
     for key in ["name", "prompt", "public", "sharing"]
@@ -134,10 +136,13 @@ start = (options) ->
 
     models.Firestarter.findOne {_id: data.model._id}, (err, doc) ->
       if err? then return socket.emit "error", {error: err}
+      unless intertwinkles.can_edit(socket.session, doc)
+        return socket.emit("error", {error: "Permission denied"})
       for key, val of updates
         doc[key] = val
       doc.save (err, doc) ->
         if err? then return socket.emit "error", {error: err}
+        doc.sharing = intertwinkles.clean_sharing(socket.session, doc)
         res = {model: doc.toJSON()}
         delete res.model.responses
         if data.callback? then socket.emit data.callback, res
@@ -155,6 +160,7 @@ start = (options) ->
       else if not intertwinkles.can_view(socket.session, model)
         socket.emit("error", {error: "Permission denied"})
       else
+        model.sharing = intertwinkles.clean_sharing(socket.session, model)
         socket.emit("firestarter", {
           model: model.toJSON()
           editable: intertwinkles.can_edit(socket.session, model)

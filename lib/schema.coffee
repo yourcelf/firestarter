@@ -1,5 +1,6 @@
 mongoose    = require 'mongoose'
 Schema      = mongoose.Schema
+_           = require 'underscore'
 
 ResponseSchema = new Schema
   firestarter_id: {type: Schema.ObjectId, ref: 'Firestarter'}

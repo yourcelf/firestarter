@@ -2,7 +2,7 @@
 
 fire = {}
 
-intertwinkles.build_toolbar($("header"), {appname: "Firestarter"})
+intertwinkles.build_toolbar($("header"), {applabel: "firestarter"})
 intertwinkles.build_footer($("footer"))
 
 class Firestarter extends Backbone.Model
@@ -37,11 +37,30 @@ if INITIAL_DATA.firestarter?
 
 class SplashView extends Backbone.View
   template: _.template($("#splashTemplate").html())
+  itemTemplate: _.template($("#listedFirestarterTemplate").html())
+
   events:
     "click .new-firestarter": "newFirestarter"
 
   render: =>
-    @$el.html(@template())
+    @$el.html(@template({
+      public_docs: INITIAL_DATA.listed_firestarters.public or []
+      group_docs: INITIAL_DATA.listed_firestarters.group or []
+    }))
+    for key in ["group", "public"]
+      if INITIAL_DATA.listed_firestarters[key]?.length > 0
+        @$(".#{key}-doc-list").html("")
+        docs = _.sortBy(INITIAL_DATA.listed_firestarters[key], (d) -> new Date(d.modified).getTime()).reverse()
+        for doc in docs
+          item = $(@itemTemplate({
+            doc: doc
+            url: fire.firestarter_url(doc.slug)
+            group: _.find intertwinkles.groups, (g) -> "" + g.id == "" + doc.sharing.group_id
+          }))
+          @$(".#{key}-doc-list").append(item)
+          date = new intertwinkles.AutoUpdatingDate(doc.modified)
+          $(".date", item).html(date.el)
+          date.render()
 
   newFirestarter: (event) =>
     event.preventDefault()
@@ -282,15 +301,14 @@ class ShowFirestarter extends Backbone.View
     if fire.responses?
       for response in fire.responses.models
         @addResponseView(response)
-    $("header .room-users").replaceWith(@roomUsersMenu.el)
+    $(".room-users").replaceWith(@roomUsersMenu.el)
     @roomUsersMenu.render()
 
-    if not fire.model.read_only
-      sharing_button = new intertwinkles.SharingSettingsButton(model: fire.model)
-      @$(".sharing").html(sharing_button.el)
-      sharing_button.render()
-      sharing_button.on "save", (sharing_settings) =>
-        @editFirestarter({sharing: sharing_settings}, sharing_button.close)
+    sharing_button = new intertwinkles.SharingSettingsButton(model: fire.model)
+    @$(".sharing").html(sharing_button.el)
+    sharing_button.render()
+    sharing_button.on "save", (sharing_settings) =>
+      @editFirestarter({sharing: sharing_settings}, sharing_button.close)
 
 class EditResponseView extends Backbone.View
   template: _.template $("#editResponseTemplate").html()
@@ -416,6 +434,9 @@ class Router extends Backbone.Router
     @view = new ShowFirestarter({slug: slug})
     $("#app").html(@view.el)
     @view.render()
+
+fire.firestarter_url = (slug) ->
+  return "#{INTERTWINKLES_APPS["firestarter"].url}/f/#{slug}"
 
 socket = io.connect("/iorooms")
 socket.on "error", (data) ->

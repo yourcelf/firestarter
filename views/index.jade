@@ -31,7 +31,8 @@ html(lang="en")
 
     <script type='text/javascript'>
     != "var INITIAL_DATA = " + JSON.stringify(initial_data) + ";"
-    != "var INTERTWINKLES_BASE_URL = '" + intertwinkles_base_url + "';"
+    != "var INTERTWINKLES_API_URL = '" + conf.api_url + "';"
+    != "var INTERTWINKLES_APPS = " + JSON.stringify(conf.apps) + ";"
     </script>
 
     script(type="text/template", id="splashTemplate")
@@ -43,7 +44,31 @@ html(lang="en")
             p
               a.btn.btn-large.btn-primary.new-firestarter(href='#')
                 | New Firestarter
+        div.row-fluid
+          div.span6
+            h3(style='text-align: center;') Public
+            ul.public-doc-list
+              li Nothing here yet.
+          div.span6
+            h3(style='text-align: center;') For your groups
+            ul.group-doc-list
+              <% if (!intertwinkles.is_authenticated()) { %>
+              li.listed-firestarter Sign in to see your firestarters.
+              <% } else {%>
+              li.listed-firestarter Nothing here yet.
+              <% } %>
 
+    script(type="text/template", id="listedFirestarterTemplate")
+      li.listed-firestarter
+        | <a href='<%= url %>'><%= doc.name %></a>
+        | <span class='date' style='float: right;'></span>
+        | <div>
+        | <% if (group) { %>
+        |   <span class='name'><%= group.name %></span>
+        | <% } %>
+        | </div>
+        | <blockquote class='prompt'><%= doc.prompt %></blockquote>
+        | <span class='responses'>(<%= doc.responses.length %> responses)</span>
 
     script(type="text/template", id="addFirestarterTemplate")
       div.row-fluid
@@ -86,7 +111,11 @@ html(lang="en")
               <% if (!read_only) { %>
               a.edit-link.edit-name(href='#') Edit
               <% } %>
-            div.sharing(style='position: absolute; right: 1em; top: 1em; text-align: left;')
+            div.pull-right(style='position: absolute; right: 1em; top: 1em; text-align: left;')
+              ul.sharing-online-group
+                li.room-users
+                li.sharing
+
         div.row-fluid
           div.span6.offset3
             div.well.hover-edit

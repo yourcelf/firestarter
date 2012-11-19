@@ -14,3 +14,4 @@ task 'runserver', 'Run the server.', (options) ->
     dbhost: config.dbhost
     dbport: config.dbport
     dbname: config.dbname
+    intertwinkles: config.intertwinkles
