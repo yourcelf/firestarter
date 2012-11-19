@@ -43,6 +43,7 @@ start = (options) ->
 
   io = socketio.listen(app, {"log level": 0})
   iorooms = new RoomManager("/iorooms", io, sessionStore)
+  io.of("/iorooms").setMaxListeners(15)
 
   #
   # Routes
@@ -165,6 +166,17 @@ start = (options) ->
           model: model.toJSON()
           editable: intertwinkles.can_edit(socket.session, model)
         })
+  
+  iorooms.onChannel "get_firestarter_list", (socket, data) ->
+    if not data.callback?
+      socket.emit "error", {error: "Missing callback parameter."}
+    else
+      intertwinkles.list_accessible_documents(
+        models.Firestarter, socket.session, (err, docs) ->
+          if err? then return socket.emit data.callback, {error: err}
+          socket.emit data.callback, {docs: docs}
+      )
+
 
   # Save a response to a firestarter.
   iorooms.onChannel "save_response", (socket, data) ->
@@ -178,7 +190,6 @@ start = (options) ->
 
     if not data.model?.firestarter_id
       respond("Missing firestarter id")
-
 
     models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
       if err? then return respond(err)

@@ -42,6 +42,19 @@ class SplashView extends Backbone.View
   events:
     "click .new-firestarter": "newFirestarter"
 
+  initialize: ->
+    intertwinkles.user.on "change", =>
+      fire.socket.on "list_firestarters", (data) =>
+        if data.error?
+          flash "error", "OH my, a server kablooie."
+          console.log(data.error)
+        else
+          console.log(data.docs)
+          INITIAL_DATA.listed_firestarters = data.docs
+          @render()
+      fire.socket.emit "get_firestarter_list", {callback: "list_firestarters"}
+
+
   render: =>
     @$el.html(@template({
       public_docs: INITIAL_DATA.listed_firestarters.public or []
