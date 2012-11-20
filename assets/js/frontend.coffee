@@ -41,6 +41,7 @@ class SplashView extends Backbone.View
 
   events:
     "click .new-firestarter": "newFirestarter"
+    "click .listed-firestarter a": "softNav"
 
   initialize: ->
     intertwinkles.user.on "change", =>
@@ -54,6 +55,9 @@ class SplashView extends Backbone.View
           @render()
       fire.socket.emit "get_firestarter_list", {callback: "list_firestarters"}
 
+  softNav: (event) =>
+    event.preventDefault()
+    fire.app.navigate($(event.currentTarget).attr("href"), {trigger: true})
 
   render: =>
     @$el.html(@template({
@@ -67,7 +71,7 @@ class SplashView extends Backbone.View
         for doc in docs
           item = $(@itemTemplate({
             doc: doc
-            url: fire.firestarter_url(doc.slug)
+            url: "f/#{doc.slug}"
             group: _.find intertwinkles.groups, (g) -> "" + g.id == "" + doc.sharing.group_id
           }))
           @$(".#{key}-doc-list").append(item)
@@ -193,7 +197,7 @@ class ShowFirestarter extends Backbone.View
       fire.socket.emit "get_firestarter", {slug: options.slug}
 
   remove: =>
-    @roomusersMenu.remove()
+    @roomUsersMenu.remove()
     fire.socket.removeAllListeners("firestarter")
     fire.socket.removeAllListeners("response")
     fire.socket.removeAllListeners("delete_response")
