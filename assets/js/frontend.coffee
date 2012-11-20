@@ -44,16 +44,24 @@ class SplashView extends Backbone.View
     "click .listed-firestarter a": "softNav"
 
   initialize: ->
-    intertwinkles.user.on "change", =>
-      fire.socket.on "list_firestarters", (data) =>
-        if data.error?
-          flash "error", "OH my, a server kablooie."
-          console.log(data.error)
-        else
-          console.log(data.docs)
-          INITIAL_DATA.listed_firestarters = data.docs
-          @render()
-      fire.socket.emit "get_firestarter_list", {callback: "list_firestarters"}
+    intertwinkles.user.on "change", @getFirestarterList
+    @dateWidgets = []
+
+  remove: =>
+    intertwinkles.user.off "change", @getFirestarterList
+    for view in @dateWidgets
+      view.remove()
+    super()
+
+  getFirestarterList: =>
+    fire.socket.on "list_firestarters", (data) =>
+      if data.error?
+        flash "error", "OH my, a server kablooie."
+        console.log(data.error)
+      else
+        INITIAL_DATA.listed_firestarters = data.docs
+        @render()
+    fire.socket.emit "get_firestarter_list", {callback: "list_firestarters"}
 
   softNav: (event) =>
     event.preventDefault()
@@ -78,6 +86,7 @@ class SplashView extends Backbone.View
           date = new intertwinkles.AutoUpdatingDate(doc.modified)
           $(".date", item).html(date.el)
           date.render()
+          @dateWidgets.push(date)
 
   newFirestarter: (event) =>
     event.preventDefault()
@@ -96,6 +105,10 @@ class AddFirestarterView extends Backbone.View
 
     @initializeURL()
     @displayURL()
+
+  remove: =>
+    @sharing_control?.remove()
+    super()
 
   renderSharingControls: =>
     @sharing_control = new intertwinkles.SharingFormControl()
@@ -197,10 +210,15 @@ class ShowFirestarter extends Backbone.View
       fire.socket.emit "get_firestarter", {slug: options.slug}
 
   remove: =>
-    @roomUsersMenu.remove()
+    @roomUsersMenu?.remove()
+    @sharing_button?.remove()
+    @editor?.remove()
+    for view in @responseViews
+      view.remove()
     fire.socket.removeAllListeners("firestarter")
     fire.socket.removeAllListeners("response")
     fire.socket.removeAllListeners("delete_response")
+    fire.model.off "change", @updateFirestarter
     delete fire.model
     if fire.responses?
       delete fire.responses
@@ -277,6 +295,7 @@ class ShowFirestarter extends Backbone.View
     @$(".add-response-holder").modal('show').on("shown", -> $("#id_user").focus())
     editor.on "done", =>
       @$(".add-response-holder").modal('hide')
+    @editor = editor
 
   addResponseView: (response) =>
     view = new ShowResponseView(response: response)
@@ -298,7 +317,6 @@ class ShowFirestarter extends Backbone.View
         callback: "response_deleted"
         model: response.toJSON()
       }
-
     @responseViews.push(view)
 
   removeResponseView: (model) =>
@@ -326,6 +344,7 @@ class ShowFirestarter extends Backbone.View
     sharing_button.render()
     sharing_button.on "save", (sharing_settings) =>
       @editFirestarter({sharing: sharing_settings}, sharing_button.close)
+    @sharing_button = sharing_button
 
 class EditResponseView extends Backbone.View
   template: _.template $("#editResponseTemplate").html()
@@ -335,6 +354,10 @@ class EditResponseView extends Backbone.View
 
   initialize: (options={}) =>
     @model = options.model or new Response()
+
+  remove: =>
+    @user_choice?.remove()
+    super()
 
   cancel: =>
     @trigger "done"
@@ -347,9 +370,9 @@ class EditResponseView extends Backbone.View
     context.verb = if @model.get("_id") then "Save" else "Add"
     @$el.html @template(context)
 
-    user_choice = new intertwinkles.UserChoice(model: @model)
-    @$("#name_controls").html user_choice.el
-    user_choice.render()
+    @user_choice = new intertwinkles.UserChoice(model: @model)
+    @$("#name_controls").html @user_choice.el
+    @user_choice.render()
 
   saveResponse: (event) =>
     event.preventDefault()
@@ -403,14 +426,20 @@ class ShowResponseView extends Backbone.View
     @response.on "change", @render
     intertwinkles.user.on "change", @render
 
+  remove: =>
+    @response.off "change", @render
+    intertwinkles.user.off "change", @render
+    @date?.remove()
+    super()
+
   render: =>
     @$el.addClass("firestarter-response")
     context = @response.toJSON()
     context.read_only = fire.model.read_only
     @$el.html(@template(context))
-    date = new intertwinkles.AutoUpdatingDate(@response.get("created"))
-    @$(".date-holder").html date.el
-    date.render()
+    @date = new intertwinkles.AutoUpdatingDate(@response.get("created"))
+    @$(".date-holder").html @date.el
+    @date.render()
     @$el.effect("highlight", {}, 3000)
 
   confirmDelete: (event) =>
