@@ -33,7 +33,8 @@ load_firestarter_data = (data) ->
 #
 if INITIAL_DATA.firestarter?
   load_firestarter_data(INITIAL_DATA.firestarter)
-  fire.model.read_only = not INITIAL_DATA.editable
+  fire.model.can_edit = INITIAL_DATA.can_edit
+  fire.model.can_change_sharing = INITIAL_DATA.can_change_sharing
 
 class SplashView extends Backbone.View
   template: _.template($("#splashTemplate").html())
@@ -80,7 +81,7 @@ class SplashView extends Backbone.View
           item = $(@itemTemplate({
             doc: doc
             url: "f/#{doc.slug}"
-            group: _.find intertwinkles.groups, (g) -> "" + g.id == "" + doc.sharing.group_id
+            group: intertwinkles.groups[doc.sharing.group_id]
           }))
           @$(".#{key}-doc-list").append(item)
           date = new intertwinkles.AutoUpdatingDate(doc.modified)
@@ -111,6 +112,7 @@ class AddFirestarterView extends Backbone.View
     super()
 
   renderSharingControls: =>
+    @sharing_control?.remove()
     @sharing_control = new intertwinkles.SharingFormControl()
     @$("#sharing_controls").html(@sharing_control.el)
     @sharing_control.render()
@@ -152,6 +154,8 @@ class AddFirestarterView extends Backbone.View
           alert("Unexpected server error! Oh fiddlesticks!")
       else
         load_firestarter_data(data.model)
+        fire.model.can_edit = true
+        fire.model.can_change_sharing = true
         fire.app.navigate("/f/#{encodeURIComponent(fire.model.get("slug"))}", {trigger: true})
 
     fire.socket.emit "create_firestarter", {
@@ -187,7 +191,10 @@ class ShowFirestarter extends Backbone.View
       console.log "on firestarter", data
       if data.model?
         load_firestarter_data(data.model)
-        fire.model.read_only = data.editable == false
+        fire.model.can_edit = data.can_edit
+        fire.model.can_change_sharing = data.can_change_sharing
+        @sharingButton?.read_only = not fire.model.can_change_sharing
+        @sharingButton?.render()
 
     fire.socket.on "response", (data) =>
       console.log "on response", data
@@ -209,9 +216,12 @@ class ShowFirestarter extends Backbone.View
     unless fire.model.get("slug") == options.slug
       fire.socket.emit "get_firestarter", {slug: options.slug}
 
+    # Reload sharing settings
+    intertwinkles.user.on "change", @refreshFirestarter
+
   remove: =>
     @roomUsersMenu?.remove()
-    @sharing_button?.remove()
+    @sharingButton?.remove()
     @editor?.remove()
     for view in @responseViews
       view.remove()
@@ -219,10 +229,16 @@ class ShowFirestarter extends Backbone.View
     fire.socket.removeAllListeners("response")
     fire.socket.removeAllListeners("delete_response")
     fire.model.off "change", @updateFirestarter
+    intertwinkles.user.off "change", @refreshFirestarter
     delete fire.model
     if fire.responses?
       delete fire.responses
     super()
+
+  refreshFirestarter: =>
+    for view in @responseViews
+      view.remove()
+    fire.socket.emit "get_firestarter", {slug: fire.model.get("slug")}
 
   editName: (event) =>
     event.preventDefault()
@@ -330,7 +346,8 @@ class ShowFirestarter extends Backbone.View
             return
 
   render: =>
-    @$el.html(@template(read_only: fire.model.read_only == true))
+    @sharingButton?.remove()
+    @$el.html(@template(read_only: fire.model.can_edit != true))
     if fire.model?
       @updateFirestarter()
     if fire.responses?
@@ -339,12 +356,14 @@ class ShowFirestarter extends Backbone.View
     $(".room-users").replaceWith(@roomUsersMenu.el)
     @roomUsersMenu.render()
 
-    sharing_button = new intertwinkles.SharingSettingsButton(model: fire.model)
-    @$(".sharing").html(sharing_button.el)
-    sharing_button.render()
-    sharing_button.on "save", (sharing_settings) =>
-      @editFirestarter({sharing: sharing_settings}, sharing_button.close)
-    @sharing_button = sharing_button
+    @sharingButton = new intertwinkles.SharingSettingsButton({
+      model: fire.model,
+      read_only: fire.model.can_change_sharing != true
+    })
+    @$(".sharing").html(@sharingButton.el)
+    @sharingButton.render()
+    @sharingButton.on "save", (sharing_settings) =>
+      @editFirestarter({sharing: sharing_settings}, @sharingButton.close)
 
 class EditResponseView extends Backbone.View
   template: _.template $("#editResponseTemplate").html()
@@ -365,7 +384,7 @@ class EditResponseView extends Backbone.View
   render: =>
     context = _.extend({
       response: ""
-      read_only: fire.model.read_only == true
+      read_only: fire.model.can_edit != true
     }, @model.toJSON())
     context.verb = if @model.get("_id") then "Save" else "Add"
     @$el.html @template(context)
@@ -435,7 +454,7 @@ class ShowResponseView extends Backbone.View
   render: =>
     @$el.addClass("firestarter-response")
     context = @response.toJSON()
-    context.read_only = fire.model.read_only
+    context.read_only = fire.model.can_edit != true
     @$el.html(@template(context))
     @date = new intertwinkles.AutoUpdatingDate(@response.get("created"))
     @$(".date-holder").html @date.el
@@ -466,6 +485,7 @@ class Router extends Backbone.Router
     @view = new SplashView()
     $("#app").html(@view.el)
     @view.render()
+    #intertwinkles.add_profile_routes(this)
 
   newFirestarter: =>
     @view?.remove()

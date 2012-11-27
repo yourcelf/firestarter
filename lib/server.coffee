@@ -41,8 +41,17 @@ start = (options) ->
 
   app.set 'view engine', 'jade'
 
-  io = socketio.listen(app, {"log level": 0})
+  io = socketio.listen app, {"log level": 0}
   iorooms = new RoomManager("/iorooms", io, sessionStore)
+  iorooms.authorizeJoinRoom = (session, name, callback) ->
+    # Only allow to join the room if we're allowed to view the firestarter.
+    models.Firestarter.findOne {'slug': name}, 'sharing', (err, doc) ->
+      return callback(err) if err?
+      if intertwinkles.can_view(session, doc)
+        callback(null)
+      else
+        callback("Permission denied")
+    
   io.of("/iorooms").setMaxListeners(15)
 
   #
@@ -71,11 +80,11 @@ start = (options) ->
       #FIXME: Redirect to login instead.
       return res.send(403) if not intertwinkles.can_view(req.session, doc)
 
-      editable =  intertwinkles.can_edit(req.session, doc)
       doc.sharing = intertwinkles.clean_sharing(req.session, doc)
       index_res(req, res, {
         firestarter: doc.toJSON()
-        editable: editable
+        can_edit: intertwinkles.can_edit(req.session, doc)
+        can_change_sharing: intertwinkles.can_change_sharing(req.session, doc)
       })
 
   # Get a valid slug for a firestarter that hasn't yet been used.
@@ -139,6 +148,8 @@ start = (options) ->
       if err? then return socket.emit "error", {error: err}
       unless intertwinkles.can_edit(socket.session, doc)
         return socket.emit("error", {error: "Permission denied"})
+      unless intertwinkles.can_change_sharing(socket.session, doc)
+        delete updates.sharing
       for key, val of updates
         doc[key] = val
       doc.save (err, doc) ->
@@ -164,7 +175,8 @@ start = (options) ->
         model.sharing = intertwinkles.clean_sharing(socket.session, model)
         socket.emit("firestarter", {
           model: model.toJSON()
-          editable: intertwinkles.can_edit(socket.session, model)
+          can_edit: intertwinkles.can_edit(socket.session, model)
+          can_change_sharing: intertwinkles.can_change_sharing(socket.session, model)
         })
   
   iorooms.onChannel "get_firestarter_list", (socket, data) ->
