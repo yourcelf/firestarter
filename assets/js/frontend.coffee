@@ -81,7 +81,7 @@ class SplashView extends Backbone.View
           item = $(@itemTemplate({
             doc: doc
             url: "f/#{doc.slug}"
-            group: intertwinkles.groups[doc.sharing.group_id]
+            group: intertwinkles.groups?[doc.sharing.group_id]
           }))
           @$(".#{key}-doc-list").append(item)
           date = new intertwinkles.AutoUpdatingDate(doc.modified)
@@ -364,6 +364,13 @@ class ShowFirestarter extends Backbone.View
     @sharingButton.render()
     @sharingButton.on "save", (sharing_settings) =>
       @editFirestarter({sharing: sharing_settings}, @sharingButton.close)
+
+    if intertwinkles.is_authenticated()
+      intertwinkles.get_events {
+        application: "firestarter"
+        entity: fire.model.id
+      }, (collection) ->
+        intertwinkles.build_timeline(@$(".timeline"), collection)
 
 class EditResponseView extends Backbone.View
   template: _.template $("#editResponseTemplate").html()

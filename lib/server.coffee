@@ -80,6 +80,16 @@ start = (options) ->
       #FIXME: Redirect to login instead.
       return res.send(403) if not intertwinkles.can_view(req.session, doc)
 
+      if intertwinkles.is_authenticated(req.session)
+        intertwinkles.post_event_for req.session.auth.email, {
+          type: "visit"
+          application: "firestarter"
+          entity: doc.id
+          entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
+          user: req.session.auth.email
+          group: doc.sharing.group_id
+        }, config, (->), 5000 * 60
+
       doc.sharing = intertwinkles.clean_sharing(req.session, doc)
       index_res(req, res, {
         firestarter: doc.toJSON()
@@ -133,6 +143,15 @@ start = (options) ->
           socket.emit(data.callback, {error: []})
       else
         socket.emit(data.callback, {model: model.toJSON()})
+        if intertwinkles.is_authenticated(socket.session)
+          intertwinkles.post_event_for socket.session.auth.email, {
+            type: "create"
+            application: "firestarter"
+            entity: model.id
+            entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
+            user: socket.session.auth.email
+            group: model.sharing.group_id
+          }, config
 
   # Edit a firestarter
   iorooms.onChannel 'edit_firestarter', (socket, data) ->
@@ -159,6 +178,16 @@ start = (options) ->
         delete res.model.responses
         if data.callback? then socket.emit data.callback, res
         socket.broadcast.to(doc.slug).emit "firestarter", res
+        if intertwinkles.is_authenticated(socket.session)
+          intertwinkles.post_event_for socket.session.auth.email, {
+            type: "update"
+            application: "firestarter"
+            entity: doc.id
+            entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
+            user: socket.session.auth.email
+            group: doc.sharing.group_id
+            data: updates
+          }, config
 
   # Retrieve a firestarter with responses.
   iorooms.onChannel 'get_firestarter', (socket, data) ->
@@ -178,6 +207,15 @@ start = (options) ->
           can_edit: intertwinkles.can_edit(socket.session, model)
           can_change_sharing: intertwinkles.can_change_sharing(socket.session, model)
         })
+        if intertwinkles.is_authenticated(socket.session)
+          intertwinkles.post_event_for socket.session.auth.email, {
+            type: "visit"
+            application: "firestarter"
+            entity: model.id
+            entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
+            user: socket.session.auth.email
+            group: model.sharing.group_id
+          }, config, (->), 5000 * 60
   
   iorooms.onChannel "get_firestarter_list", (socket, data) ->
     if not data.callback?
@@ -217,6 +255,16 @@ start = (options) ->
             respond(err, firestarter, responseDoc)
         else
           respond(err, firestarter, responseDoc)
+        if intertwinkles.is_authenticated(socket.session)
+          intertwinkles.post_event_for socket.session.auth.email, {
+            type: "append"
+            application: "firestarter"
+            entity: firestarter.id
+            entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
+            user: responseDoc.user_id or null
+            group: firestarter.sharing.group_id
+            data: responseDoc.toJSON()
+          }, config
       
       updates = {
         user_id: data.model.user_id
