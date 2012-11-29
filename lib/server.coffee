@@ -61,6 +61,7 @@ start = (options) ->
   index_res = (req, res, initial_data) ->
     intertwinkles.list_accessible_documents models.Firestarter, req.session, (err, docs) ->
       return res.send(500) if err?
+      console.log(docs)
       res.render 'index', {
         title: "Firestarter"
         initial_data: _.extend({
@@ -151,6 +152,10 @@ start = (options) ->
             entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
             user: socket.session.auth.email
             group: model.sharing.group_id
+            data: {
+              name: model.name
+              prompt: model.prompt
+            }
           }, config
 
   # Edit a firestarter
@@ -262,6 +267,7 @@ start = (options) ->
             entity: firestarter.id
             entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
             user: responseDoc.user_id or null
+            via_user: socket.session.auth.user_id
             group: firestarter.sharing.group_id
             data: responseDoc.toJSON()
           }, config
@@ -291,6 +297,16 @@ start = (options) ->
       responseData = {model: {_id: data.model._id}}
       if data.callback? then socket.emit(data.callback, responseData)
       socket.broadcast.to(firestarter.slug).emit("delete_response", responseData)
+      if intertwinkles.is_authenticated(socket.session)
+        intertwinkles.post_event_for socket.session.auth.email, {
+          type: "trim"
+          application: "firestarter"
+          entity: firestarter.id
+          entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
+          user: socket.session.auth.email
+          group: firestarter.sharing.group_id
+          data: response?.toJSON()
+        }, config
 
     models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
       if err? then return respond(err)
@@ -308,9 +324,10 @@ start = (options) ->
           index = firestarter.responses.indexOf(data.model._id)
           if index != -1
             firestarter.responses.splice(index, 1)
-            firestarter.save(respond)
+            firestarter.save (err, firestarter) ->
+              respond(err, firestarter, doc)
           else
-            respond(err, firestarter)
+            respond(err, firestarter, doc)
 
   intertwinkles.attach(config, app, iorooms)
 

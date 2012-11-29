@@ -98,8 +98,6 @@ html(lang="en")
 
     script(type="text/template", id="firestarterTemplate")
       div.container-fluid
-        div.row-fluid
-          div.span12.timeline(style='text-align: center;')
         div.row-fluid(style='position: relative;')
           div.span12(style='text-align: center;')
             div.first-loading
@@ -135,6 +133,10 @@ html(lang="en")
             div.modal.hide.fade.add-response-holder
         div.row-fluid
           div.span12.responses(style='text-align: center;')
+
+        div.row-fluid
+          div.span12.timeline-holder(style='text-align: center;')
+
         div.modal.fade.hide.edit-name-modal
           form.form-horizontal
             div.modal-body

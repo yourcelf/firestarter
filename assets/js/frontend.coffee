@@ -364,13 +364,51 @@ class ShowFirestarter extends Backbone.View
     @sharingButton.render()
     @sharingButton.on "save", (sharing_settings) =>
       @editFirestarter({sharing: sharing_settings}, @sharingButton.close)
+    @buildTimeline()
 
-    if intertwinkles.is_authenticated()
+    # XXX: Very inefficient.
+    fire.model.on "change", @buildTimeline
+    fire.responses.on "change add remove", @buildTimeline
+
+  buildTimeline: =>
+    if intertwinkles.is_authenticated() and fire.model.id
       intertwinkles.get_events {
         application: "firestarter"
         entity: fire.model.id
       }, (collection) ->
-        intertwinkles.build_timeline(@$(".timeline"), collection)
+        intertwinkles.build_timeline @$(".timeline-holder"), collection, (event) ->
+          user = intertwinkles.users[event.user]
+          via_user = intertwinkles.users[event.via_user]
+          if via_user? and via_user.id == user?.id
+            via_user = null
+          if user?
+            icon = "<img src='#{user.icon.tiny}' />"
+          else
+            icon = "<i class='icon-user'></i>"
+          switch event.type
+            when "create"
+              title = "Firestarter created"
+              content = "#{user?.name or "Anonymous"} created this firestarter."
+            when "visit"
+              title = "Visit"
+              content = "#{user?.name or "Anonymous"} stopped by."
+            when "append"
+              title = "Response added"
+              if via_user?
+                content = "#{user?.name or event.data.name} responded (via #{via_user.name})."
+              else
+                content = "#{user?.name or event.data.name} responded."
+            when "update"
+              title = "Firestarter updated"
+              content = "#{user?.name or "Anonymous"} updated the firestarter."
+            when "trim"
+              title = "Response removed"
+              content = "#{user?.name or "Anonymous"} removed a response by #{event.data.name}."
+          return """
+            <a class='#{ event.type }' rel='popover' data-placement='bottom'
+               data-trigger='hover' title='#{ title }'
+               data-content='#{ content }'>#{ icon }</a>
+          """
 
 class EditResponseView extends Backbone.View
   template: _.template $("#editResponseTemplate").html()
