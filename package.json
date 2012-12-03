@@ -31,6 +31,7 @@
         "socket.io": "~0.9",
         "redis": "~0",
         "winston": "~0",
+        "async": "~0",
         "node-iorooms": "git+https://github.com/yourcelf/node-iorooms.git",
         "node-intertwinkles": "git+https://github.com/yourcelf/node-intertwinkles.git"
     },

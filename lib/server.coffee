@@ -7,10 +7,11 @@ intertwinkles = require 'node-intertwinkles'
 models        = require './schema'
 config        = require './config'
 _             = require 'underscore'
+async         = require 'async'
 
-start = (options) ->
+start = (config) ->
   db = mongoose.connect(
-    "mongodb://#{options.dbhost}:#{options.dbport}/#{options.dbname}"
+    "mongodb://#{config.dbhost}:#{config.dbport}/#{config.dbname}"
   )
   sessionStore = new RedisStore
 
@@ -24,7 +25,7 @@ start = (options) ->
     app.use express.bodyParser()
     app.use express.cookieParser()
     app.use express.session
-      secret: options.secret
+      secret: config.secret
       key: 'express.sid'
       store: sessionStore
     app.set 'view options', {layout: false}
@@ -61,7 +62,8 @@ start = (options) ->
   index_res = (req, res, initial_data) ->
     intertwinkles.list_accessible_documents models.Firestarter, req.session, (err, docs) ->
       return res.send(500) if err?
-      console.log(docs)
+      clean_conf = _.extend({}, config.intertwinkles)
+      delete clean_conf.api_key
       res.render 'index', {
         title: "Firestarter"
         initial_data: _.extend({
@@ -69,7 +71,7 @@ start = (options) ->
           groups: req.session.groups or null
           listed_firestarters: docs
         }, initial_data)
-        conf: options.intertwinkles
+        conf: clean_conf
       }
 
   app.get '/', (req, res) -> index_res(req, res, {})
@@ -145,17 +147,28 @@ start = (options) ->
       else
         socket.emit(data.callback, {model: model.toJSON()})
         if intertwinkles.is_authenticated(socket.session)
+          url = "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
           intertwinkles.post_event_for socket.session.auth.email, {
             type: "create"
             application: "firestarter"
             entity: model.id
-            entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
+            entity_url: url
             user: socket.session.auth.email
             group: model.sharing.group_id
             data: {
               name: model.name
               prompt: model.prompt
             }
+          }, config
+          intertwinkles.post_search_index {
+            application: "firestarter"
+            entity: model.id
+            type: "firestarter"
+            url: url
+            title: model.name
+            summary: model.prompt
+            content: [model.name, model.prompt].join("\n")
+            sharing: model.sharing
           }, config
 
   # Edit a firestarter
@@ -168,7 +181,9 @@ start = (options) ->
         changes = true
     if not changes then return socket.emit "error", {error: "No edits specified."}
 
-    models.Firestarter.findOne {_id: data.model._id}, (err, doc) ->
+    models.Firestarter.findOne({
+      _id: data.model._id
+    }).populate('responses').exec (err, doc) ->
       if err? then return socket.emit "error", {error: err}
       unless intertwinkles.can_edit(socket.session, doc)
         return socket.emit("error", {error: "Permission denied"})
@@ -183,16 +198,31 @@ start = (options) ->
         delete res.model.responses
         if data.callback? then socket.emit data.callback, res
         socket.broadcast.to(doc.slug).emit "firestarter", res
+        
+        # Add event and search index.
+        url = "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
         if intertwinkles.is_authenticated(socket.session)
-          intertwinkles.post_event_for socket.session.auth.email, {
+          intertwinkles.post_event_for(socket.session.auth.email, {
             type: "update"
             application: "firestarter"
             entity: doc.id
-            entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
+            entity_url: url
             user: socket.session.auth.email
             group: doc.sharing.group_id
             data: updates
-          }, config
+          }, config)
+        intertwinkles.post_search_index({
+          application: "firestarter"
+          entity: doc.id
+          type: "firestarter"
+          url: url
+          title: doc.name
+          summary: doc.prompt
+          content: [doc.name, doc.prompt].concat((
+            res.response for res in doc.responses
+          )).join("\n")
+        }, config)
+
 
   # Retrieve a firestarter with responses.
   iorooms.onChannel 'get_firestarter', (socket, data) ->
@@ -235,106 +265,165 @@ start = (options) ->
 
   # Save a response to a firestarter.
   iorooms.onChannel "save_response", (socket, data) ->
-    respond = (err, firestarter, response) ->
-      if err?
-        socket.emit "error", {error: err}
-      else
-        responseData = {model: response.toJSON()}
-        if data.callback? then socket.emit(data.callback, responseData)
-        socket.broadcast.to(firestarter.slug).emit("response", responseData)
+    async.waterfall [
+      # Grab the firestarter. Populate responses so we can build search
+      # content.
+      (done) ->
+        models.Firestarter.findOne({
+          _id: data.model.firestarter_id
+        }).populate("responses").exec (err, firestarter) ->
+          return done(err) if err?
+          unless intertwinkles.can_edit(socket.session, firestarter)
+            done("Permission denied")
+          else
+            done(null, firestarter)
 
-    if not data.model?.firestarter_id
-      respond("Missing firestarter id")
-
-    models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
-      if err? then return respond(err)
-      unless intertwinkles.can_edit(socket.session, firestarter)
-        return respond("Permission denied")
-
-      updateFirestarter = (err, responseDoc) ->
-        if err? then return respond(err)
-        if firestarter.responses.indexOf(responseDoc._id) == -1
-          # Add response to firestarter.
-          firestarter.responses.push(responseDoc._id)
-          firestarter.save (err, firestarter) ->
-            respond(err, firestarter, responseDoc)
+      # Save the response.
+      (firestarter, done) ->
+        updates = {
+          user_id: data.model.user_id
+          name: data.model.name
+          response: data.model.response
+          firestarter_id: firestarter._id
+        }
+        if data.model._id
+          conditions = {
+            _id: data.model._id
+          }
+          options = {upsert: true, 'new': true}
+          models.Response.findOneAndUpdate conditions, updates, options, (err, doc) ->
+            done(err, firestarter, doc)
         else
-          respond(err, firestarter, responseDoc)
-        if intertwinkles.is_authenticated(socket.session)
-          intertwinkles.post_event_for socket.session.auth.email, {
-            type: "append"
-            application: "firestarter"
-            entity: firestarter.id
-            entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
-            user: responseDoc.user_id or null
-            via_user: socket.session.auth.user_id
-            group: firestarter.sharing.group_id
-            data: responseDoc.toJSON()
-          }, config
-      
-      updates = {
-        user_id: data.model.user_id
-        name: data.model.name
-        response: data.model.response
-        firestarter_id: firestarter._id
-      }
-      if data.model._id
-        models.Response.findOne {_id: data.model._id}, (err, doc) ->
-          if err? then return respond(err)
-          for key, val of updates
-            doc[key] = val
-          doc.save(updateFirestarter)
-      else
-        doc = new models.Response(updates)
-        doc.save(updateFirestarter)
+          new models.Response(updates).save (err, doc) ->
+            done(err, firestarter, doc)
+
+      # Replace or insert the response, build search content
+      (firestarter, response, done) ->
+        found = false
+        for orig_response,i in firestarter.responses
+          if orig_response._id == response._id
+            firestarter.responses.splice(i, 1, response)
+            found = true
+            break
+        if not found
+          firestarter.responses.push(response)
+          console.log(firestarter.responses)
+
+        # Get the search content.
+        search_content = [firestarter.name, firestarter.prompt].concat((
+          r.response for r in firestarter.responses
+        )).join("\n")
+
+        # If this is a new response, un-populate responses and save it to
+        # the firestarter's list.
+        if not found
+          firestarter.save (err, doc) ->
+            done(err, doc, response, search_content)
+        else
+          done(err, firestarter, response, search_content)
+
+    ], (err, firestarter, response, search_content) ->
+      # Call back to sockets.
+      return socket.emit "error", {error: err} if err?
+      responseData = {model: response.toJSON()}
+      socket.broadcast.to(firestarter.slug).emit("response", responseData)
+      socket.emit(data.callback, responseData) if data.callback?
+
+      # Post search data
+      url = "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
+      intertwinkles.post_search_index {
+        application: "firestarter", entity: firestarter.id,
+        type: "firestarter", url: url,
+        title: firestarter.name, summary: firestarter.prompt,
+        content: search_content
+      }, config, (err) ->
+        socket.emit("error", {error: err}) if err?
+
+      # Post an event if we're signed in.
+      if intertwinkles.is_authenticated(socket.session)
+        intertwinkles.post_event_for(socket.session.auth.email, {
+          type: "append"
+          application: "firestarter"
+          entity: firestarter.id
+          entity_url: url
+          user: response.user_id or null
+          via_user: socket.session.auth.user_id
+          group: firestarter.sharing.group_id
+          data: response.toJSON()
+        }, config)
 
   # Delete a response
   iorooms.onChannel "delete_response", (socket, data) ->
-    if not data.model?.firestarter_id? then respond("Missing firestarter id")
+    return done("No response._id specified") unless data.model._id?
+    return done("No firestarter_id specified") unless data.model.firestarter_id?
+    async.waterfall [
+      (done) ->
+        # Fetch firestarter and validate permissions.
+        models.Firestarter.findOne({
+          _id: data.model.firestarter_id
+          responses: data.model._id
+        }).populate('responses').exec (err, firestarter) ->
+          return done(err) if err?
+          return done("Firestarter not found.") unless firestarter?
+          unless intertwinkles.can_edit(socket.session, firestarter)
+            return done("Permission denied")
+          
+          for response,i in firestarter.responses
+            if response._id.toString() == data.model._id
+              firestarter.responses.splice(i, 1)
+              return done(null, firestarter, response)
+          return done("Error: response not found")
 
-    respond = (err, firestarter, response) ->
-      if err? then return socket.emit "error", {error: err}
-      responseData = {model: {_id: data.model._id}}
-      if data.callback? then socket.emit(data.callback, responseData)
-      socket.broadcast.to(firestarter.slug).emit("delete_response", responseData)
-      if intertwinkles.is_authenticated(socket.session)
-        intertwinkles.post_event_for socket.session.auth.email, {
-          type: "trim"
-          application: "firestarter"
-          entity: firestarter.id
-          entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
-          user: socket.session.auth.email
-          group: firestarter.sharing.group_id
-          data: response?.toJSON()
-        }, config
+      (firestarter, response, done) ->
+        # Build search content, save firestarter and response.
+        search_content = [firestarter.name, firestarter.prompt].concat((
+          r.response for r in firestarter.responses
+        )).join("\n")
+        async.parallel [
+          (done) -> firestarter.save(done)
+          (done) -> response.remove(done)
+        ], (err) ->
+          done(err, firestarter, response, search_content)
 
-    models.Firestarter.findOne {_id: data.model.firestarter_id }, (err, firestarter) ->
-      if err? then return respond(err)
-      unless intertwinkles.can_edit(socket.session, firestarter)
-        return respond("Permission denied")
+      (firestarter, response, search_content, done) ->
+        # Respond to the sockets
+        responseData = {model: {_id: data.model._id}}
+        socket.emit(data.callback, responseData) if data.callback?
+        socket.broadcast.to(firestarter.slug).emit("delete_response", responseData)
 
-      if not firestarter? then return respond("Error: firestarter not found.")
-      unless data.model._id? then return respond("No response._id specified.")
+        # Post event
+        url = "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
+        if intertwinkles.is_authenticated(socket.session)
+          intertwinkles.post_event_for socket.session.auth.email, {
+            type: "trim"
+            application: "firestarter"
+            entity: firestarter.id
+            entity_url: url
+            user: socket.session.auth.email
+            group: firestarter.sharing.group_id
+            data: response?.toJSON()
+          }, config, (err) ->
+            socket.emit "error", {error: err} if err?
+        
+        # Post search index
+        intertwinkles.post_search_index {
+            application: "firestarter", entity: firestarter.id,
+            type: "firestarter", url: url,
+            title: firestarter.name, summary: firestarter.prompt,
+            content: search_content
+          }, config, (err) ->
+            socket.emit "error", {error: err} if err?
 
-      models.Response.findOne {_id: data.model._id}, (err, doc) ->
-        if err? then return respond(err)
-        doc.remove (err) ->
-          if err? then return respond(err)
-          # Remove response ID from firestarter doc
-          index = firestarter.responses.indexOf(data.model._id)
-          if index != -1
-            firestarter.responses.splice(index, 1)
-            firestarter.save (err, firestarter) ->
-              respond(err, firestarter, doc)
-          else
-            respond(err, firestarter, doc)
+    ], (err) ->
+      socket.emit "error", {error: err} if err?
+
 
   intertwinkles.attach(config, app, iorooms)
 
   #
   # Start
   #
-  app.listen options.port
+  app.listen config.port
   return { app, io, iorooms, sessionStore, db }
 
 module.exports = { start }
