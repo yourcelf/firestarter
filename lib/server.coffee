@@ -96,8 +96,6 @@ start = (config) ->
       doc.sharing = intertwinkles.clean_sharing(req.session, doc)
       index_res(req, res, {
         firestarter: doc.toJSON()
-        can_edit: intertwinkles.can_edit(req.session, doc)
-        can_change_sharing: intertwinkles.can_change_sharing(req.session, doc)
       })
 
   # Get a valid slug for a firestarter that hasn't yet been used.
@@ -167,7 +165,7 @@ start = (config) ->
             url: url
             title: model.name
             summary: model.prompt
-            content: [model.name, model.prompt].join("\n")
+            text: [model.name, model.prompt].join("\n")
             sharing: model.sharing
           }, config
 
@@ -218,7 +216,8 @@ start = (config) ->
           url: url
           title: doc.name
           summary: doc.prompt
-          content: [doc.name, doc.prompt].concat((
+          sharing: doc.sharing
+          text: [doc.name, doc.prompt].concat((
             res.response for res in doc.responses
           )).join("\n")
         }, config)
@@ -239,8 +238,6 @@ start = (config) ->
         model.sharing = intertwinkles.clean_sharing(socket.session, model)
         socket.emit("firestarter", {
           model: model.toJSON()
-          can_edit: intertwinkles.can_edit(socket.session, model)
-          can_change_sharing: intertwinkles.can_change_sharing(socket.session, model)
         })
         if intertwinkles.is_authenticated(socket.session)
           intertwinkles.post_event_for socket.session.auth.email, {
@@ -307,7 +304,6 @@ start = (config) ->
             break
         if not found
           firestarter.responses.push(response)
-          console.log(firestarter.responses)
 
         # Get the search content.
         search_content = [firestarter.name, firestarter.prompt].concat((
@@ -335,7 +331,8 @@ start = (config) ->
         application: "firestarter", entity: firestarter.id,
         type: "firestarter", url: url,
         title: firestarter.name, summary: firestarter.prompt,
-        content: search_content
+        sharing: firestarter.sharing
+        text: search_content
       }, config, (err) ->
         socket.emit("error", {error: err}) if err?
 
@@ -410,7 +407,7 @@ start = (config) ->
             application: "firestarter", entity: firestarter.id,
             type: "firestarter", url: url,
             title: firestarter.name, summary: firestarter.prompt,
-            content: search_content
+            text: search_content, sharing: firestarter.sharing,
           }, config, (err) ->
             socket.emit "error", {error: err} if err?
 

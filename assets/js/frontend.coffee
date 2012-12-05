@@ -33,8 +33,6 @@ load_firestarter_data = (data) ->
 #
 if INITIAL_DATA.firestarter?
   load_firestarter_data(INITIAL_DATA.firestarter)
-  fire.model.can_edit = INITIAL_DATA.can_edit
-  fire.model.can_change_sharing = INITIAL_DATA.can_change_sharing
 
 class SplashView extends Backbone.View
   template: _.template($("#splashTemplate").html())
@@ -58,7 +56,7 @@ class SplashView extends Backbone.View
     fire.socket.on "list_firestarters", (data) =>
       if data.error?
         flash "error", "OH my, a server kablooie."
-        console.log(data.error)
+        console.info(data.error)
       else
         INITIAL_DATA.listed_firestarters = data.docs
         @render()
@@ -154,8 +152,6 @@ class AddFirestarterView extends Backbone.View
           alert("Unexpected server error! Oh fiddlesticks!")
       else
         load_firestarter_data(data.model)
-        fire.model.can_edit = true
-        fire.model.can_change_sharing = true
         fire.app.navigate("/f/#{encodeURIComponent(fire.model.get("slug"))}", {trigger: true})
 
     fire.socket.emit "create_firestarter", {
@@ -188,25 +184,21 @@ class ShowFirestarter extends Backbone.View
     @roomUsersMenu = new intertwinkles.RoomUsersMenu({room: options.slug})
 
     fire.socket.on "firestarter", (data) =>
-      console.log "on firestarter", data
+      console.info "on firestarter", data
       if data.model?
         load_firestarter_data(data.model)
-        fire.model.can_edit = data.can_edit
-        fire.model.can_change_sharing = data.can_change_sharing
-        @sharingButton?.read_only = not fire.model.can_change_sharing
+        @sharingButton?.read_only = not intertwinkles.can_change_sharing(fire.model)
         @sharingButton?.render()
 
     fire.socket.on "response", (data) =>
-      console.log "on response", data
-      response = fire.responses.get(data._id)
+      response = fire.responses.get(data.model._id)
       if not response?
         response = new Response(data.model)
         fire.responses.add(response)
       else
-        response.set(data)
+        response.set(data.model)
 
     fire.socket.on "delete_response", (data) =>
-      console.log "on delete_response", data
       fire.responses.remove(fire.responses.get(data.model._id))
 
     fire.model.on "change", @updateFirestarter
@@ -281,7 +273,7 @@ class ShowFirestarter extends Backbone.View
     fire.socket.once 'firestarter_edited', (data) =>
       if data.error?
         flash "error", "Oh no!  Survur Urrur!"
-        console.log(data.error)
+        console.info(data.error)
       else
         fire.model.set(data.model)
       cb()
@@ -323,7 +315,7 @@ class ShowFirestarter extends Backbone.View
       fire.socket.once "response_deleted", (data) ->
         if data.error?
           flash "error", "Oh No! Server fail..."
-          console.log(data.error)
+          console.info(data.error)
         else
           fire.responses.remove(response)
           fire.model.set({
@@ -347,7 +339,7 @@ class ShowFirestarter extends Backbone.View
 
   render: =>
     @sharingButton?.remove()
-    @$el.html(@template(read_only: fire.model.can_edit != true))
+    @$el.html(@template(read_only: not intertwinkles.can_edit(fire.model)))
     if fire.model?
       @updateFirestarter()
     if fire.responses?
@@ -358,17 +350,17 @@ class ShowFirestarter extends Backbone.View
 
     @sharingButton = new intertwinkles.SharingSettingsButton({
       model: fire.model,
-      read_only: fire.model.can_change_sharing != true
+      read_only: not intertwinkles.can_change_sharing(fire.model)
     })
     @$(".sharing").html(@sharingButton.el)
     @sharingButton.render()
     @sharingButton.on "save", (sharing_settings) =>
       @editFirestarter({sharing: sharing_settings}, @sharingButton.close)
-    @buildTimeline()
 
     # XXX: Very inefficient.
-    fire.model.on "change", @buildTimeline
-    fire.responses.on "change add remove", @buildTimeline
+    #@buildTimeline()
+    #fire.model.on "change", @buildTimeline
+    #fire.responses.on "change add remove", @buildTimeline
 
   buildTimeline: =>
     if intertwinkles.is_authenticated() and fire.model.id
@@ -429,7 +421,7 @@ class EditResponseView extends Backbone.View
   render: =>
     context = _.extend({
       response: ""
-      read_only: fire.model.can_edit != true
+      read_only: not intertwinkles.can_edit(fire.model)
     }, @model.toJSON())
     context.verb = if @model.get("_id") then "Save" else "Add"
     @$el.html @template(context)
@@ -469,7 +461,7 @@ class EditResponseView extends Backbone.View
       fire.socket.once "response_saved", (data) =>
         if data.error
           flash "error", "Oh noes. SERVER ERROR. !!"
-          console.log data.error
+          console.info data.error
         else
           add_it = not @model.get("_id")?
           @model.set(data.model)
@@ -499,7 +491,7 @@ class ShowResponseView extends Backbone.View
   render: =>
     @$el.addClass("firestarter-response")
     context = @response.toJSON()
-    context.read_only = fire.model.can_edit != true
+    context.read_only = not intertwinkles.can_edit(fire.model)
     @$el.html(@template(context))
     @date = new intertwinkles.AutoUpdatingDate(@response.get("created"))
     @$(".date-holder").html @date.el
