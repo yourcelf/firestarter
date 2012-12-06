@@ -201,15 +201,15 @@ class ShowFirestarter extends Backbone.View
     fire.socket.on "delete_response", (data) =>
       fire.responses.remove(fire.responses.get(data.model._id))
 
-    fire.model.on "change", @updateFirestarter
-    fire.responses.on "add", @addResponseView
-    fire.responses.on "remove", @removeResponseView
+    fire.model.on "change", @updateFirestarter, this
+    fire.responses.on "add", @addResponseView, this
+    fire.responses.on "remove", @removeResponseView, this
 
     unless fire.model.get("slug") == options.slug
       fire.socket.emit "get_firestarter", {slug: options.slug}
 
     # Reload sharing settings
-    intertwinkles.user.on "change", @refreshFirestarter
+    intertwinkles.user.on "change", @refreshFirestarter, this
 
   remove: =>
     @roomUsersMenu?.remove()
@@ -220,8 +220,8 @@ class ShowFirestarter extends Backbone.View
     fire.socket.removeAllListeners("firestarter")
     fire.socket.removeAllListeners("response")
     fire.socket.removeAllListeners("delete_response")
-    fire.model.off "change", @updateFirestarter
-    intertwinkles.user.off "change", @refreshFirestarter
+    fire.model.off null, null, this
+    intertwinkles.user.off null, null, this
     delete fire.model
     if fire.responses?
       delete fire.responses
@@ -286,8 +286,8 @@ class ShowFirestarter extends Backbone.View
 
   updateFirestarter: =>
     @$(".first-loading").hide()
-    @$(".firestarter-name").html(fire.model.get("name"))
-    @$(".firestarter-prompt").html(fire.model.get("prompt"))
+    @$(".firestarter-name").html(_.escapeHTML(fire.model.get("name")))
+    @$(".firestarter-prompt").html(intertwinkles.markup(fire.model.get("prompt")))
     @$(".firestarter-date").html(
       new Date(fire.model.get("created")).toString("htt dddd, MMMM dd, yyyy")
     )
@@ -338,9 +338,13 @@ class ShowFirestarter extends Backbone.View
             return
 
   render: =>
+    # HACK: wait for the model to be ready before rendering.
+    unless fire.model?.id
+      setTimeout @render, 10
+      return
     @sharingButton?.remove()
     @$el.html(@template(read_only: not intertwinkles.can_edit(fire.model)))
-    if fire.model?
+    if fire.model? and fire.model.id
       @updateFirestarter()
     if fire.responses?
       for response in fire.responses.models
@@ -357,20 +361,27 @@ class ShowFirestarter extends Backbone.View
     @sharingButton.on "save", (sharing_settings) =>
       @editFirestarter({sharing: sharing_settings}, @sharingButton.close)
 
-    # XXX: Very inefficient.
-    #@buildTimeline()
-    #fire.model.on "change", @buildTimeline
-    #fire.responses.on "change add remove", @buildTimeline
+    # XXX: Make this more efficient, e.g. by limiting to events older than what
+    # we already have.
+    @buildTimeline()
+    build_timeline_timeout = null
+    buildWithTimeout = =>
+      clearTimeout(build_timeline_timeout) if build_timeline_timeout?
+      build_timeline_timeout = setTimeout @buildTimeline, 1000
+    fire.model.on "change", buildWithTimeout, null
+    fire.responses.on "change add remove", buildWithTimeout, this
 
   buildTimeline: =>
-    if intertwinkles.is_authenticated() and fire.model.id
-      intertwinkles.get_events {
-        application: "firestarter"
-        entity: fire.model.id
-      }, (collection) ->
+    if fire.model.id
+      callback = "events_" + new Date().getTime()
+      fire.socket.once callback, (data) =>
+        collection = new intertwinkles.EventCollection()
+        for event in data.events
+          event.date = new Date(event.date)
+          collection.add new intertwinkles.Event(event)
         intertwinkles.build_timeline @$(".timeline-holder"), collection, (event) ->
-          user = intertwinkles.users[event.user]
-          via_user = intertwinkles.users[event.via_user]
+          user = intertwinkles.users?[event.user]
+          via_user = intertwinkles.users?[event.via_user]
           if via_user? and via_user.id == user?.id
             via_user = null
           if user?
@@ -401,6 +412,11 @@ class ShowFirestarter extends Backbone.View
                data-trigger='hover' title='#{ title }'
                data-content='#{ content }'>#{ icon }</a>
           """
+
+      fire.socket.emit "get_firestarter_events", {
+        callback: callback,
+        firestarter_id: fire.model.id
+      }
 
 class EditResponseView extends Backbone.View
   template: _.template $("#editResponseTemplate").html()
@@ -480,7 +496,7 @@ class ShowResponseView extends Backbone.View
   initialize: (options={}) ->
     @response = options.response
     @response.on "change", @render
-    intertwinkles.user.on "change", @render
+    intertwinkles.user.on "change", @render, this
 
   remove: =>
     @response.off "change", @render
@@ -522,7 +538,6 @@ class Router extends Backbone.Router
     @view = new SplashView()
     $("#app").html(@view.el)
     @view.render()
-    #intertwinkles.add_profile_routes(this)
 
   newFirestarter: =>
     @view?.remove()

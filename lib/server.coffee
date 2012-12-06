@@ -66,11 +66,10 @@ start = (config) ->
       delete clean_conf.api_key
       res.render 'index', {
         title: "Firestarter"
-        initial_data: _.extend({
-          email: req.session.auth?.email or null
-          groups: req.session.groups or null
-          listed_firestarters: docs
-        }, initial_data)
+        initial_data: _.extend(
+          intertwinkles.get_initial_data(req.session), {
+            listed_firestarters: docs
+          }, initial_data)
         conf: clean_conf
       }
 
@@ -83,15 +82,15 @@ start = (config) ->
       #FIXME: Redirect to login instead.
       return res.send(403) if not intertwinkles.can_view(req.session, doc)
 
-      if intertwinkles.is_authenticated(req.session)
-        intertwinkles.post_event_for req.session.auth.email, {
-          type: "visit"
-          application: "firestarter"
-          entity: doc.id
-          entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
-          user: req.session.auth.email
-          group: doc.sharing.group_id
-        }, config, (->), 5000 * 60
+      intertwinkles.post_event {
+        type: "visit"
+        application: "firestarter"
+        entity: doc.id
+        entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
+        user: req.session.auth?.email
+        anon_id: req.session.anon_id
+        group: doc.sharing.group_id
+      }, config, (->), 5000 * 60
 
       doc.sharing = intertwinkles.clean_sharing(req.session, doc)
       index_res(req, res, {
@@ -144,30 +143,30 @@ start = (config) ->
           socket.emit(data.callback, {error: []})
       else
         socket.emit(data.callback, {model: model.toJSON()})
-        if intertwinkles.is_authenticated(socket.session)
-          url = "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
-          intertwinkles.post_event_for socket.session.auth.email, {
-            type: "create"
-            application: "firestarter"
-            entity: model.id
-            entity_url: url
-            user: socket.session.auth.email
-            group: model.sharing.group_id
-            data: {
-              name: model.name
-              prompt: model.prompt
-            }
-          }, config
-          intertwinkles.post_search_index {
-            application: "firestarter"
-            entity: model.id
-            type: "firestarter"
-            url: url
-            title: model.name
-            summary: model.prompt
-            text: [model.name, model.prompt].join("\n")
-            sharing: model.sharing
-          }, config
+        url = "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
+        intertwinkles.post_event {
+          type: "create"
+          application: "firestarter"
+          entity: model.id
+          entity_url: url
+          user: socket.session.auth?.email
+          anon_id: socket.session.anon_id
+          group: model.sharing.group_id
+          data: {
+            name: model.name
+            prompt: model.prompt
+          }
+        }, config
+        intertwinkles.post_search_index {
+          application: "firestarter"
+          entity: model.id
+          type: "firestarter"
+          url: url
+          title: model.name
+          summary: model.prompt
+          text: [model.name, model.prompt].join("\n")
+          sharing: model.sharing
+        }, config
 
   # Edit a firestarter
   iorooms.onChannel 'edit_firestarter', (socket, data) ->
@@ -199,16 +198,16 @@ start = (config) ->
         
         # Add event and search index.
         url = "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
-        if intertwinkles.is_authenticated(socket.session)
-          intertwinkles.post_event_for(socket.session.auth.email, {
-            type: "update"
-            application: "firestarter"
-            entity: doc.id
-            entity_url: url
-            user: socket.session.auth.email
-            group: doc.sharing.group_id
-            data: updates
-          }, config)
+        intertwinkles.post_event {
+          type: "update"
+          application: "firestarter"
+          entity: doc.id
+          entity_url: url
+          user: socket.session.auth?.email
+          anon_id: socket.session.anon_id
+          group: doc.sharing.group_id
+          data: updates
+        }, config
         intertwinkles.post_search_index({
           application: "firestarter"
           entity: doc.id
@@ -239,15 +238,15 @@ start = (config) ->
         socket.emit("firestarter", {
           model: model.toJSON()
         })
-        if intertwinkles.is_authenticated(socket.session)
-          intertwinkles.post_event_for socket.session.auth.email, {
-            type: "visit"
-            application: "firestarter"
-            entity: model.id
-            entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
-            user: socket.session.auth.email
-            group: model.sharing.group_id
-          }, config, (->), 5000 * 60
+        intertwinkles.post_event {
+          type: "visit"
+          application: "firestarter"
+          entity: model.id
+          entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
+          user: socket.session.auth?.email
+          anon_id: socket.session.anon_id
+          group: model.sharing.group_id
+        }, config, (->), 5000 * 60
   
   iorooms.onChannel "get_firestarter_list", (socket, data) ->
     if not data.callback?
@@ -259,6 +258,20 @@ start = (config) ->
           socket.emit data.callback, {docs: docs}
       )
 
+  iorooms.onChannel "get_firestarter_events", (socket, data) ->
+    unless data.firestarter_id?
+      return socket.emit "error", {error: "Missing firestarter ID"}
+    unless data.callback?
+      return socket.emit "error", {error: "Missing callback"}
+    models.Firestarter.findOne {_id: data.firestarter_id}, (err, doc) ->
+      if not intertwinkles.can_view(socket.session, doc)
+        return socket.emit "error", {error: "Permission denied"}
+      intertwinkles.get_events {
+        application: "firestarter"
+        entity: doc.id
+      }, config, (err, results) ->
+        return socket.emit "error", {error: err} if err?
+        socket.emit data.callback, {events: results?.events}
 
   # Save a response to a firestarter.
   iorooms.onChannel "save_response", (socket, data) ->
@@ -337,17 +350,17 @@ start = (config) ->
         socket.emit("error", {error: err}) if err?
 
       # Post an event if we're signed in.
-      if intertwinkles.is_authenticated(socket.session)
-        intertwinkles.post_event_for(socket.session.auth.email, {
-          type: "append"
-          application: "firestarter"
-          entity: firestarter.id
-          entity_url: url
-          user: response.user_id or null
-          via_user: socket.session.auth.user_id
-          group: firestarter.sharing.group_id
-          data: response.toJSON()
-        }, config)
+      intertwinkles.post_event {
+        type: "append"
+        application: "firestarter"
+        entity: firestarter.id
+        entity_url: url
+        user: response.user_id or null
+        anon_id: socket.session.anon_id
+        via_user: socket.session.auth?.user_id
+        group: firestarter.sharing.group_id
+        data: response.toJSON()
+      }, config
 
   # Delete a response
   iorooms.onChannel "delete_response", (socket, data) ->
@@ -390,17 +403,17 @@ start = (config) ->
 
         # Post event
         url = "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
-        if intertwinkles.is_authenticated(socket.session)
-          intertwinkles.post_event_for socket.session.auth.email, {
-            type: "trim"
-            application: "firestarter"
-            entity: firestarter.id
-            entity_url: url
-            user: socket.session.auth.email
-            group: firestarter.sharing.group_id
-            data: response?.toJSON()
-          }, config, (err) ->
-            socket.emit "error", {error: err} if err?
+        intertwinkles.post_event {
+          type: "trim"
+          application: "firestarter"
+          entity: firestarter.id
+          entity_url: url
+          user: socket.session.auth?.email
+          anon_id: socket.session.anon_id
+          group: firestarter.sharing.group_id
+          data: response?.toJSON()
+        }, config, (err) ->
+          socket.emit "error", {error: err} if err?
         
         # Post search index
         intertwinkles.post_search_index {

@@ -67,7 +67,7 @@ html(lang="en")
         |   <span class='name'><%= group.name %></span>
         | <% } %>
         | </div>
-        | <blockquote class='prompt'><%= doc.prompt %></blockquote>
+        | <blockquote class='prompt'><%- intertwinkles.markup(doc.prompt) %></blockquote>
         | <span class='responses'>(<%= doc.responses.length %> responses)</span>
 
     script(type="text/template", id="addFirestarterTemplate")
