@@ -103,19 +103,21 @@ html(lang="en")
             div.first-loading
               em Sparking...
               img(src="/static/img/sparking.gif")
+
+            div.hidden-desktop(style='height: 2.5em;')
+            div.pull-right(style='position: absolute; right: 1em; top: 0.5em; text-align: left; height: 2em;')
+              ul.sharing-online-group
+                li.room-users
+                li.sharing
+            div(style='clear: both;')
+
             div.byline
               span.firestarter-date
-              span.firestarter-participants
-
             h1.hover-edit(style='display: inline-block')
               span.firestarter-name
               <% if (!read_only) { %>
               a.edit-link.edit-name(href='#') Edit
               <% } %>
-            div.pull-right(style='position: absolute; right: 1em; top: 1em; text-align: left;')
-              ul.sharing-online-group
-                li.room-users
-                li.sharing
 
         div.row-fluid
           div.span6.offset3
