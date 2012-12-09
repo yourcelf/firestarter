@@ -4,8 +4,7 @@ mongoose      = require 'mongoose'
 RoomManager   = require('iorooms').RoomManager
 RedisStore    = require('connect-redis')(express)
 intertwinkles = require 'node-intertwinkles'
-models        = require './schema'
-config        = require './config'
+schema        = require './schema'
 _             = require 'underscore'
 async         = require 'async'
 
@@ -31,14 +30,20 @@ start = (config) ->
     app.set 'view options', {layout: false}
 
   app.configure 'development', ->
-    app.use '/static', express.static(__dirname + '/../assets')
-    app.use '/static', express.static(__dirname + '/../node_modules/node-intertwinkles/assets')
+    app.use '/static', express.static(
+      __dirname + '/../assets')
+    app.use '/static', express.static(
+      __dirname + '/../node_modules/node-intertwinkles/assets')
     app.use express.errorHandler {dumpExceptions: true, showStack: true }
 
   app.configure 'production', ->
     # Cache long time in production.
-    app.use '/static', express.static(__dirname + '/../assets', { maxAge: 1000*60*60*24 })
-    app.use '/static', express.static(__dirname + '/../node_modules/node-intertwinkles/assets', { maxAge: 1000*60*60*24 })
+    app.use '/static', express.static(
+      __dirname + '/../assets',
+      { maxAge: 1000*60*60*24 })
+    app.use '/static', express.static(
+      __dirname + '/../node_modules/node-intertwinkles/assets',
+      { maxAge: 1000*60*60*24 })
 
   app.set 'view engine', 'jade'
 
@@ -46,7 +51,7 @@ start = (config) ->
   iorooms = new RoomManager("/iorooms", io, sessionStore)
   iorooms.authorizeJoinRoom = (session, name, callback) ->
     # Only allow to join the room if we're allowed to view the firestarter.
-    models.Firestarter.findOne {'slug': name}, 'sharing', (err, doc) ->
+    schema.Firestarter.findOne {'slug': name}, 'sharing', (err, doc) ->
       return callback(err) if err?
       if intertwinkles.can_view(session, doc)
         callback(null)
@@ -60,7 +65,7 @@ start = (config) ->
   #
 
   index_res = (req, res, initial_data) ->
-    intertwinkles.list_accessible_documents models.Firestarter, req.session, (err, docs) ->
+    intertwinkles.list_accessible_documents schema.Firestarter, req.session, (err, docs) ->
       return res.send(500) if err?
       clean_conf = _.extend({}, config.intertwinkles)
       delete clean_conf.api_key
@@ -76,7 +81,7 @@ start = (config) ->
   app.get '/', (req, res) -> index_res(req, res, {})
   app.get '/new', (req, res) -> index_res(req, res, {})
   app.get '/f/:slug', (req, res) ->
-    models.Firestarter.with_responses {slug: req.params.slug}, (err, doc) ->
+    schema.Firestarter.with_responses {slug: req.params.slug}, (err, doc) ->
       return res.send(500) if err?
       return res.send(404) if not doc?
       #FIXME: Redirect to login instead.
@@ -86,7 +91,7 @@ start = (config) ->
         type: "visit"
         application: "firestarter"
         entity: doc.id
-        entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
+        entity_url: "/f/#{doc.slug}"
         user: req.session.auth?.email
         anon_id: req.session.anon_id
         group: doc.sharing.group_id
@@ -108,7 +113,7 @@ start = (config) ->
       random_name = (
         choices.substr(parseInt(Math.random() * choices.length), 1) for i in [0...6]
       ).join("")
-      models.Firestarter.find {slug: random_name}, (err, things) ->
+      schema.Firestarter.find {slug: random_name}, (err, things) ->
         socket.emit({error: err}) if err
         if things.length == 0
           socket.emit(data.callback, {slug: random_name})
@@ -125,7 +130,7 @@ start = (config) ->
     unless intertwinkles.can_edit(socket.session, data.model)
       return socket.emit("error", {error: "Permission denied"})
 
-    model = new models.Firestarter(data.model)
+    model = new schema.Firestarter(data.model)
     model.save (err, model) ->
       if err?
         errors = []
@@ -143,7 +148,7 @@ start = (config) ->
           socket.emit(data.callback, {error: []})
       else
         socket.emit(data.callback, {model: model.toJSON()})
-        url = "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
+        url = "/f/#{model.slug}"
         intertwinkles.post_event {
           type: "create"
           application: "firestarter"
@@ -178,7 +183,7 @@ start = (config) ->
         changes = true
     if not changes then return socket.emit "error", {error: "No edits specified."}
 
-    models.Firestarter.findOne({
+    schema.Firestarter.findOne({
       _id: data.model._id
     }).populate('responses').exec (err, doc) ->
       if err? then return socket.emit "error", {error: err}
@@ -197,7 +202,7 @@ start = (config) ->
         socket.broadcast.to(doc.slug).emit "firestarter", res
         
         # Add event and search index.
-        url = "#{config.intertwinkles.apps.firestarter.url}/f/#{doc.slug}"
+        url = "/f/#{doc.slug}"
         intertwinkles.post_event {
           type: "update"
           application: "firestarter"
@@ -226,7 +231,7 @@ start = (config) ->
   iorooms.onChannel 'get_firestarter', (socket, data) ->
     unless data.slug?
       socket.emit("error", {error: "Missing slug!"})
-    models.Firestarter.with_responses {slug: data.slug}, (err, model) ->
+    schema.Firestarter.with_responses {slug: data.slug}, (err, model) ->
       if err?
         socket.emit("error", {error: err})
       else if not model?
@@ -242,7 +247,7 @@ start = (config) ->
           type: "visit"
           application: "firestarter"
           entity: model.id
-          entity_url: "#{config.intertwinkles.apps.firestarter.url}/f/#{model.slug}"
+          entity_url: "/f/#{model.slug}"
           user: socket.session.auth?.email
           anon_id: socket.session.anon_id
           group: model.sharing.group_id
@@ -253,7 +258,7 @@ start = (config) ->
       socket.emit "error", {error: "Missing callback parameter."}
     else
       intertwinkles.list_accessible_documents(
-        models.Firestarter, socket.session, (err, docs) ->
+        schema.Firestarter, socket.session, (err, docs) ->
           if err? then return socket.emit data.callback, {error: err}
           socket.emit data.callback, {docs: docs}
       )
@@ -263,7 +268,7 @@ start = (config) ->
       return socket.emit "error", {error: "Missing firestarter ID"}
     unless data.callback?
       return socket.emit "error", {error: "Missing callback"}
-    models.Firestarter.findOne {_id: data.firestarter_id}, (err, doc) ->
+    schema.Firestarter.findOne {_id: data.firestarter_id}, (err, doc) ->
       if not intertwinkles.can_view(socket.session, doc)
         return socket.emit "error", {error: "Permission denied"}
       intertwinkles.get_events {
@@ -279,7 +284,7 @@ start = (config) ->
       # Grab the firestarter. Populate responses so we can build search
       # content.
       (done) ->
-        models.Firestarter.findOne({
+        schema.Firestarter.findOne({
           _id: data.model.firestarter_id
         }).populate("responses").exec (err, firestarter) ->
           return done(err) if err?
@@ -301,10 +306,10 @@ start = (config) ->
             _id: data.model._id
           }
           options = {upsert: true, 'new': true}
-          models.Response.findOneAndUpdate conditions, updates, options, (err, doc) ->
+          schema.Response.findOneAndUpdate conditions, updates, options, (err, doc) ->
             done(err, firestarter, doc)
         else
-          new models.Response(updates).save (err, doc) ->
+          new schema.Response(updates).save (err, doc) ->
             done(err, firestarter, doc)
 
       # Replace or insert the response, build search content
@@ -339,7 +344,7 @@ start = (config) ->
       socket.emit(data.callback, responseData) if data.callback?
 
       # Post search data
-      url = "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
+      url = "/f/#{firestarter.slug}"
       intertwinkles.post_search_index {
         application: "firestarter", entity: firestarter.id,
         type: "firestarter", url: url,
@@ -369,7 +374,7 @@ start = (config) ->
     async.waterfall [
       (done) ->
         # Fetch firestarter and validate permissions.
-        models.Firestarter.findOne({
+        schema.Firestarter.findOne({
           _id: data.model.firestarter_id
           responses: data.model._id
         }).populate('responses').exec (err, firestarter) ->
@@ -402,7 +407,7 @@ start = (config) ->
         socket.broadcast.to(firestarter.slug).emit("delete_response", responseData)
 
         # Post event
-        url = "#{config.intertwinkles.apps.firestarter.url}/f/#{firestarter.slug}"
+        url = "/f/#{firestarter.slug}"
         intertwinkles.post_event {
           type: "trim"
           application: "firestarter"

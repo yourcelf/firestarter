@@ -330,9 +330,9 @@ class ShowFirestarter extends Backbone.View
   removeResponseView: (model) =>
     for view in @responseViews
       if view.response.get("_id") == model.get("_id")
-        do (view) ->
-          view.$el.fadeOut 800, ->
-            @responseViews = _.reject @responseViews, (v) ->
+        do (view) =>
+          view.$el.fadeOut 800, =>
+            @responseViews = _.reject @responseViews, (v) =>
               v.response.get("_id") == model.get("_id")
             view.remove()
             return

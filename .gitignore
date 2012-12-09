@@ -4,5 +4,5 @@ node_modules
 *.pyc
 server.log
 bin
-config.json
+config.*
 fabfile.py
