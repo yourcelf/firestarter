@@ -95,6 +95,9 @@ start = (config) ->
         user: req.session.auth?.email
         anon_id: req.session.anon_id
         group: doc.sharing.group_id
+        data: {
+          title: doc.name
+        }
       }, config, (->), 5000 * 60
 
       doc.sharing = intertwinkles.clean_sharing(req.session, doc)
@@ -158,8 +161,11 @@ start = (config) ->
           anon_id: socket.session.anon_id
           group: model.sharing.group_id
           data: {
-            name: model.name
-            prompt: model.prompt
+            action: {
+              name: model.name
+              prompt: model.prompt
+            }
+            title: model.name
           }
         }, config
         intertwinkles.post_search_index {
@@ -211,7 +217,10 @@ start = (config) ->
           user: socket.session.auth?.email
           anon_id: socket.session.anon_id
           group: doc.sharing.group_id
-          data: updates
+          data: {
+            title: doc.name
+            action: updates
+          }
         }, config
         intertwinkles.post_search_index({
           application: "firestarter"
@@ -251,6 +260,7 @@ start = (config) ->
           user: socket.session.auth?.email
           anon_id: socket.session.anon_id
           group: model.sharing.group_id
+          data: { title: model.name }
         }, config, (->), 5000 * 60
   
   iorooms.onChannel "get_firestarter_list", (socket, data) ->
@@ -364,7 +374,10 @@ start = (config) ->
         anon_id: socket.session.anon_id
         via_user: socket.session.auth?.user_id
         group: firestarter.sharing.group_id
-        data: response.toJSON()
+        data: {
+          title: firestarter.name
+          action: response.toJSON()
+        }
       }, config
 
   # Delete a response
@@ -416,7 +429,10 @@ start = (config) ->
           user: socket.session.auth?.email
           anon_id: socket.session.anon_id
           group: firestarter.sharing.group_id
-          data: response?.toJSON()
+          data: {
+            title: firestarter.name
+            action: response?.toJSON()
+          }
         }, config, (err) ->
           socket.emit "error", {error: err} if err?
         
