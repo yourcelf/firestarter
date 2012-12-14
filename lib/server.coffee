@@ -67,15 +67,13 @@ start = (config) ->
   index_res = (req, res, initial_data) ->
     intertwinkles.list_accessible_documents schema.Firestarter, req.session, (err, docs) ->
       return res.send(500) if err?
-      clean_conf = _.extend({}, config.intertwinkles)
-      delete clean_conf.api_key
       res.render 'index', {
         title: "Firestarter"
         initial_data: _.extend(
           intertwinkles.get_initial_data(req.session), {
             listed_firestarters: docs
           }, initial_data)
-        conf: clean_conf
+        conf: intertwinkles.clean_conf(config)
       }
 
   app.get '/', (req, res) -> index_res(req, res, {})
