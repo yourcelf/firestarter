@@ -70,6 +70,7 @@ start = (config) ->
       res.render 'index', {
         title: "Firestarter"
         initial_data: _.extend(
+          {application: "firestarter"},
           intertwinkles.get_initial_data(req.session), {
             listed_firestarters: docs
           }, initial_data)
