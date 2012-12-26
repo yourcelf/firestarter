@@ -71,7 +71,7 @@ start = (config) ->
         title: "Firestarter"
         initial_data: _.extend(
           {application: "firestarter"},
-          intertwinkles.get_initial_data(req.session), {
+          intertwinkles.get_initial_data(req.session, config), {
             listed_firestarters: docs
           }, initial_data)
         conf: intertwinkles.clean_conf(config)
